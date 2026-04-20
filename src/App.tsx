@@ -14,6 +14,7 @@ import SearchPage from "./pages/SearchPage.tsx";
 import Auth from "./pages/Auth.tsx";
 import Profile from "./pages/Profile.tsx";
 import AdminUsers from "./pages/AdminUsers.tsx";
+import EditEntry from "./pages/EditEntry.tsx";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,8 @@ const App = () => (
             <Route path="/categories" element={<Categories />} />
             <Route path="/category/:slug" element={<CategoryPage />} />
             <Route path="/entry/:slug" element={<EntryPage />} />
+            <Route path="/edit/:slug" element={<EditEntry />} />
+            <Route path="/edit" element={<EditEntry />} />
             <Route path="/dictionary" element={<Dictionary />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/auth" element={<Auth />} />
