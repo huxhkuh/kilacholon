@@ -301,7 +301,7 @@ export default function EditEntry() {
 
               {/* Change summary */}
               <div>
-                <Label htmlFor="change-summary" className="mb-1.5 block">תקציר עריכה <span className="text-rose-700">*</span></Label>
+                <Label htmlFor="change-summary" className="mb-1.5 block">תקציר עריכה <span className="text-destructive">*</span></Label>
                 <Input
                   id="change-summary"
                   value={changeSummary}
