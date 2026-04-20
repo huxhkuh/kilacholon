@@ -14,16 +14,167 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      entry_revisions: {
+        Row: {
+          author_id: string
+          category: string
+          change_summary: string
+          content: string
+          created_at: string
+          entry_slug: string
+          id: string
+          is_new_entry: boolean
+          reviewed_at: string | null
+          reviewer_id: string | null
+          reviewer_notes: string | null
+          status: Database["public"]["Enums"]["revision_status"]
+          summary: string
+          tags: string[] | null
+          title: string
+        }
+        Insert: {
+          author_id: string
+          category: string
+          change_summary?: string
+          content: string
+          created_at?: string
+          entry_slug: string
+          id?: string
+          is_new_entry?: boolean
+          reviewed_at?: string | null
+          reviewer_id?: string | null
+          reviewer_notes?: string | null
+          status?: Database["public"]["Enums"]["revision_status"]
+          summary: string
+          tags?: string[] | null
+          title: string
+        }
+        Update: {
+          author_id?: string
+          category?: string
+          change_summary?: string
+          content?: string
+          created_at?: string
+          entry_slug?: string
+          id?: string
+          is_new_entry?: boolean
+          reviewed_at?: string | null
+          reviewer_id?: string | null
+          reviewer_notes?: string | null
+          status?: Database["public"]["Enums"]["revision_status"]
+          summary?: string
+          tags?: string[] | null
+          title?: string
+        }
+        Relationships: []
+      }
+      entry_talk: {
+        Row: {
+          author_id: string
+          body: string
+          created_at: string
+          entry_slug: string
+          id: string
+          parent_id: string | null
+        }
+        Insert: {
+          author_id: string
+          body: string
+          created_at?: string
+          entry_slug: string
+          id?: string
+          parent_id?: string | null
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          created_at?: string
+          entry_slug?: string
+          id?: string
+          parent_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entry_talk_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "entry_talk"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          contributions_count: number
+          created_at: string
+          display_name: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          bio?: string | null
+          contributions_count?: number
+          created_at?: string
+          display_name: string
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          bio?: string | null
+          contributions_count?: number
+          created_at?: string
+          display_name?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          granted_at: string
+          granted_by: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      auto_promote_user: { Args: { _user_id: string }; Returns: undefined }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_editor_or_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "viewer" | "new_writer" | "veteran_writer" | "editor" | "admin"
+      revision_status: "pending" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +301,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["viewer", "new_writer", "veteran_writer", "editor", "admin"],
+      revision_status: ["pending", "approved", "rejected"],
+    },
   },
 } as const
