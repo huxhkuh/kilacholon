@@ -209,6 +209,30 @@ export default function EditEntry() {
         {mode === "edit" ? (
           <div className="grid lg:grid-cols-[1fr_280px] gap-6">
             <div className="space-y-5 min-w-0">
+              {/* Stub toggle - only for new entries */}
+              {isNew && (
+                <div className={cn(
+                  "rounded-xl border p-4 flex items-start gap-3 transition-colors",
+                  isStub ? "bg-gold/10 border-gold/40" : "bg-secondary/40 border-border"
+                )}>
+                  <FileQuestion className={cn("h-5 w-5 mt-0.5 shrink-0", isStub ? "text-gold-deep" : "text-muted-foreground")} />
+                  <div className="flex-1 min-w-0">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isStub}
+                        onChange={e => setIsStub(e.target.checked)}
+                        className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+                      />
+                      <span className="font-medium text-sm">יצירת ערך ריק (קצרמר)</span>
+                    </label>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      צרו שלד של ערך עם כותרת וקטגוריה בלבד. הערך יסומן כ"קצרמר" ויוכל להיות מורחב מאוחר יותר על ידי כותבים אחרים.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Title */}
               <div>
                 <Label htmlFor="title" className="mb-1.5 block">כותרת הערך</Label>
@@ -243,7 +267,7 @@ export default function EditEntry() {
               </div>
 
               {/* Summary */}
-              <div>
+              <div className={cn(isStub && "opacity-50 pointer-events-none")}>
                 <Label htmlFor="summary" className="mb-1.5 block">תקציר (1–3 משפטים)</Label>
                 <Textarea
                   id="summary"
@@ -255,7 +279,7 @@ export default function EditEntry() {
               </div>
 
               {/* Content with toolbar */}
-              <div>
+              <div className={cn(isStub && "opacity-50 pointer-events-none")}>
                 <Label htmlFor="content" className="mb-1.5 block">תוכן הערך</Label>
                 <div className="rounded-md border border-input overflow-hidden bg-background">
                   {/* Toolbar */}
