@@ -338,7 +338,7 @@ export default function EditEntry() {
               </div>
 
               {/* Change summary */}
-              <div>
+              <div className={cn(isStub && "hidden")}>
                 <Label htmlFor="change-summary" className="mb-1.5 block">תקציר עריכה <span className="text-destructive">*</span></Label>
                 <Input
                   id="change-summary"
@@ -355,11 +355,11 @@ export default function EditEntry() {
                   <Button variant="ghost">ביטול</Button>
                 </Link>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => setMode("preview")}>
+                  <Button variant="outline" onClick={() => setMode("preview")} disabled={isStub}>
                     <Eye className="h-4 w-4" /> תצוגה מקדימה
                   </Button>
                   <Button onClick={handleSubmit} disabled={submitting}>
-                    <Save className="h-4 w-4" /> {submitting ? "שולח…" : "שליחה לבדיקה"}
+                    <Save className="h-4 w-4" /> {submitting ? "שולח…" : isStub ? "יצירת קצרמר" : "שליחה לבדיקה"}
                   </Button>
                 </div>
               </div>
