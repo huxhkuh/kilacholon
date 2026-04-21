@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowRight, Bold, Italic, Link2, List, ListOrdered, Heading2, Save, Eye, AlertTriangle, BookOpen } from "lucide-react";
+import { ArrowRight, Bold, Italic, Link2, List, ListOrdered, Heading2, Save, Eye, AlertTriangle, BookOpen, FileQuestion } from "lucide-react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,7 @@ export default function EditEntry() {
   const [mode, setMode] = useState<Mode>("edit");
   const [submitting, setSubmitting] = useState(false);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
+  const [isStub, setIsStub] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -102,28 +103,41 @@ export default function EditEntry() {
   // ---------- Submit ----------
   async function handleSubmit() {
     if (!user) { navigate("/auth"); return; }
-    if (!title.trim() || !summary.trim() || !content.trim() || !category) {
-      toast.error("נא למלא כותרת, קטגוריה, תקציר ותוכן");
-      return;
-    }
-    if (!changeSummary.trim()) {
-      toast.error("נא לכתוב תקציר עריכה (מה שונה ולמה)");
-      return;
+    if (isStub && isNew) {
+      if (!title.trim() || !category) {
+        toast.error("נא למלא כותרת וקטגוריה לערך הריק");
+        return;
+      }
+    } else {
+      if (!title.trim() || !summary.trim() || !content.trim() || !category) {
+        toast.error("נא למלא כותרת, קטגוריה, תקציר ותוכן");
+        return;
+      }
+      if (!changeSummary.trim()) {
+        toast.error("נא לכתוב תקציר עריכה (מה שונה ולמה)");
+        return;
+      }
     }
 
     const slugForSave = isNew
       ? title.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\u0590-\u05FF\-]/g, "")
       : slug;
 
+    const stubSummary = "ערך זה הוא קצרמר. אתם מוזמנים להרחיב אותו.";
+    const stubContent = `## ${title.trim()}\n\nזהו ערך ריק (קצרמר) שעדיין לא נכתב.\n\nאתם מוזמנים [לערוך](/edit/${slugForSave}) ולהוסיף תוכן: הגדרה, הסבר, דוגמאות וקישורים פנימיים בעזרת התחביר \`[[slug]]\`.`;
+    const effectiveTags = isStub
+      ? Array.from(new Set([...(tagsRaw.split(",").map(t => t.trim()).filter(Boolean)), "קצרמר"]))
+      : tagsRaw.split(",").map(t => t.trim()).filter(Boolean);
+
     setSubmitting(true);
     const { error } = await supabase.from("entry_revisions").insert({
       entry_slug: slugForSave,
       title: title.trim(),
       category,
-      summary: summary.trim(),
-      content: content.trim(),
-      tags: tagsRaw.split(",").map(t => t.trim()).filter(Boolean),
-      change_summary: changeSummary.trim(),
+      summary: isStub ? stubSummary : summary.trim(),
+      content: isStub ? stubContent : content.trim(),
+      tags: effectiveTags,
+      change_summary: isStub ? "יצירת קצרמר (ערך ריק להרחבה)" : changeSummary.trim(),
       is_new_entry: isNew,
       author_id: user.id,
     });
