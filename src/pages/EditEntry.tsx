@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowRight, Bold, Italic, Link2, List, ListOrdered, Heading2, Save, Eye, AlertTriangle, BookOpen } from "lucide-react";
+import { ArrowRight, Bold, Italic, Link2, List, ListOrdered, Heading2, Save, Eye, AlertTriangle, BookOpen, FileQuestion } from "lucide-react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,7 @@ export default function EditEntry() {
   const [mode, setMode] = useState<Mode>("edit");
   const [submitting, setSubmitting] = useState(false);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
+  const [isStub, setIsStub] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -102,28 +103,41 @@ export default function EditEntry() {
   // ---------- Submit ----------
   async function handleSubmit() {
     if (!user) { navigate("/auth"); return; }
-    if (!title.trim() || !summary.trim() || !content.trim() || !category) {
-      toast.error("נא למלא כותרת, קטגוריה, תקציר ותוכן");
-      return;
-    }
-    if (!changeSummary.trim()) {
-      toast.error("נא לכתוב תקציר עריכה (מה שונה ולמה)");
-      return;
+    if (isStub && isNew) {
+      if (!title.trim() || !category) {
+        toast.error("נא למלא כותרת וקטגוריה לערך הריק");
+        return;
+      }
+    } else {
+      if (!title.trim() || !summary.trim() || !content.trim() || !category) {
+        toast.error("נא למלא כותרת, קטגוריה, תקציר ותוכן");
+        return;
+      }
+      if (!changeSummary.trim()) {
+        toast.error("נא לכתוב תקציר עריכה (מה שונה ולמה)");
+        return;
+      }
     }
 
     const slugForSave = isNew
       ? title.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\u0590-\u05FF\-]/g, "")
       : slug;
 
+    const stubSummary = "ערך זה הוא קצרמר. אתם מוזמנים להרחיב אותו.";
+    const stubContent = `## ${title.trim()}\n\nזהו ערך ריק (קצרמר) שעדיין לא נכתב.\n\nאתם מוזמנים [לערוך](/edit/${slugForSave}) ולהוסיף תוכן: הגדרה, הסבר, דוגמאות וקישורים פנימיים בעזרת התחביר \`[[slug]]\`.`;
+    const effectiveTags = isStub
+      ? Array.from(new Set([...(tagsRaw.split(",").map(t => t.trim()).filter(Boolean)), "קצרמר"]))
+      : tagsRaw.split(",").map(t => t.trim()).filter(Boolean);
+
     setSubmitting(true);
     const { error } = await supabase.from("entry_revisions").insert({
       entry_slug: slugForSave,
       title: title.trim(),
       category,
-      summary: summary.trim(),
-      content: content.trim(),
-      tags: tagsRaw.split(",").map(t => t.trim()).filter(Boolean),
-      change_summary: changeSummary.trim(),
+      summary: isStub ? stubSummary : summary.trim(),
+      content: isStub ? stubContent : content.trim(),
+      tags: effectiveTags,
+      change_summary: isStub ? "יצירת קצרמר (ערך ריק להרחבה)" : changeSummary.trim(),
       is_new_entry: isNew,
       author_id: user.id,
     });
@@ -195,6 +209,30 @@ export default function EditEntry() {
         {mode === "edit" ? (
           <div className="grid lg:grid-cols-[1fr_280px] gap-6">
             <div className="space-y-5 min-w-0">
+              {/* Stub toggle - only for new entries */}
+              {isNew && (
+                <div className={cn(
+                  "rounded-xl border p-4 flex items-start gap-3 transition-colors",
+                  isStub ? "bg-gold/10 border-gold/40" : "bg-secondary/40 border-border"
+                )}>
+                  <FileQuestion className={cn("h-5 w-5 mt-0.5 shrink-0", isStub ? "text-gold-deep" : "text-muted-foreground")} />
+                  <div className="flex-1 min-w-0">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isStub}
+                        onChange={e => setIsStub(e.target.checked)}
+                        className="h-4 w-4 rounded border-input accent-primary cursor-pointer"
+                      />
+                      <span className="font-medium text-sm">יצירת ערך ריק (קצרמר)</span>
+                    </label>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      צרו שלד של ערך עם כותרת וקטגוריה בלבד. הערך יסומן כ"קצרמר" ויוכל להיות מורחב מאוחר יותר על ידי כותבים אחרים.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Title */}
               <div>
                 <Label htmlFor="title" className="mb-1.5 block">כותרת הערך</Label>
@@ -229,7 +267,7 @@ export default function EditEntry() {
               </div>
 
               {/* Summary */}
-              <div>
+              <div className={cn(isStub && "opacity-50 pointer-events-none")}>
                 <Label htmlFor="summary" className="mb-1.5 block">תקציר (1–3 משפטים)</Label>
                 <Textarea
                   id="summary"
@@ -241,7 +279,7 @@ export default function EditEntry() {
               </div>
 
               {/* Content with toolbar */}
-              <div>
+              <div className={cn(isStub && "opacity-50 pointer-events-none")}>
                 <Label htmlFor="content" className="mb-1.5 block">תוכן הערך</Label>
                 <div className="rounded-md border border-input overflow-hidden bg-background">
                   {/* Toolbar */}
@@ -300,7 +338,7 @@ export default function EditEntry() {
               </div>
 
               {/* Change summary */}
-              <div>
+              <div className={cn(isStub && "hidden")}>
                 <Label htmlFor="change-summary" className="mb-1.5 block">תקציר עריכה <span className="text-destructive">*</span></Label>
                 <Input
                   id="change-summary"
@@ -317,11 +355,11 @@ export default function EditEntry() {
                   <Button variant="ghost">ביטול</Button>
                 </Link>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => setMode("preview")}>
+                  <Button variant="outline" onClick={() => setMode("preview")} disabled={isStub}>
                     <Eye className="h-4 w-4" /> תצוגה מקדימה
                   </Button>
                   <Button onClick={handleSubmit} disabled={submitting}>
-                    <Save className="h-4 w-4" /> {submitting ? "שולח…" : "שליחה לבדיקה"}
+                    <Save className="h-4 w-4" /> {submitting ? "שולח…" : isStub ? "יצירת קצרמר" : "שליחה לבדיקה"}
                   </Button>
                 </div>
               </div>
