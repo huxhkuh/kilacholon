@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowRight, Bold, Italic, Link2, List, ListOrdered, Heading2, Save, Eye, AlertTriangle, BookOpen, FileQuestion } from "lucide-react";
+import { ArrowRight, Bold, Italic, Link2, List, ListOrdered, Heading2, Save, Eye, AlertTriangle, BookOpen, FileQuestion, Sparkles, CheckCircle2, Circle } from "lucide-react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import {
   Command,
   CommandEmpty,
@@ -44,6 +45,25 @@ export default function EditEntry() {
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [isStub, setIsStub] = useState(false);
 
+  // ---------- Stub expansion workflow ----------
+  const [stubRevisionId, setStubRevisionId] = useState<string | null>(null);
+  const [isStubEntry, setIsStubEntry] = useState(false);
+  const [expandMode, setExpandMode] = useState(false);
+  const [defField, setDefField] = useState("");
+  const [explField, setExplField] = useState("");
+  const [exField, setExField] = useState("");
+
+  // Minimum chars for each required expansion field
+  const MIN_DEF = 20;
+  const MIN_EXPL = 80;
+  const MIN_EX = 30;
+
+  const defOk = defField.trim().length >= MIN_DEF;
+  const explOk = explField.trim().length >= MIN_EXPL;
+  const exOk = exField.trim().length >= MIN_EX;
+  const completed = [defOk, explOk, exOk].filter(Boolean).length;
+  const progressPct = Math.round((completed / 3) * 100);
+
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -53,6 +73,30 @@ export default function EditEntry() {
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
   }, [authLoading, user, navigate]);
+
+  // Detect if the entry being edited is a stub (קצרמר) — fetch latest revision
+  useEffect(() => {
+    if (isNew || !slug) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("entry_revisions")
+        .select("id, title, category, summary, content, tags")
+        .eq("entry_slug", slug)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled || !data) return;
+      const tags = (data.tags as string[] | null) ?? [];
+      const looksLikeStub = tags.includes("קצרמר") || /קצרמר/.test(data.summary || "") || /קצרמר/.test(data.content || "");
+      if (looksLikeStub) {
+        setIsStubEntry(true);
+        setStubRevisionId(data.id);
+        setExpandMode(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isNew, slug]);
 
   // ---------- Editor toolbar helpers ----------
   function wrapSelection(before: string, after = before) {
@@ -103,6 +147,43 @@ export default function EditEntry() {
   // ---------- Submit ----------
   async function handleSubmit() {
     if (!user) { navigate("/auth"); return; }
+
+    // Stub expansion submission
+    if (expandMode) {
+      if (!defOk || !explOk || !exOk) {
+        toast.error("נא למלא את שלושת השדות (הגדרה, הסבר, דוגמה) באורך המינימלי");
+        return;
+      }
+      if (!changeSummary.trim()) {
+        toast.error("נא לכתוב תקציר עריכה (מה שונה ולמה)");
+        return;
+      }
+      const slugForSave = slug;
+      const compiledContent = `## הגדרה\n\n${defField.trim()}\n\n## הסבר\n\n${explField.trim()}\n\n## דוגמה\n\n${exField.trim()}`;
+      const compiledSummary = defField.trim().slice(0, 280);
+      const cleanedTags = Array.from(new Set(
+        tagsRaw.split(",").map(t => t.trim()).filter(Boolean).filter(t => t !== "קצרמר")
+      ));
+
+      setSubmitting(true);
+      const { error } = await supabase.from("entry_revisions").insert({
+        entry_slug: slugForSave,
+        title: title.trim() || existing?.title || slugForSave,
+        category,
+        summary: compiledSummary,
+        content: compiledContent,
+        tags: cleanedTags,
+        change_summary: `הרחבת קצרמר: ${changeSummary.trim()}`,
+        is_new_entry: false,
+        author_id: user.id,
+      });
+      setSubmitting(false);
+      if (error) { toast.error("שגיאה בשליחה: " + error.message); return; }
+      toast.success("ההרחבה נשלחה לבדיקת עורך. תודה על תרומתך!");
+      navigate(`/entry/${slugForSave}`);
+      return;
+    }
+
     if (isStub && isNew) {
       if (!title.trim() || !category) {
         toast.error("נא למלא כותרת וקטגוריה לערך הריק");
@@ -165,24 +246,57 @@ export default function EditEntry() {
               <ArrowRight className="h-3.5 w-3.5" />
             </>
           )}
-          <span className="text-foreground/80">{isNew ? "ערך חדש" : "עריכה"}</span>
+          <span className="text-foreground/80">{isNew ? "ערך חדש" : expandMode ? "הרחבת קצרמר" : "עריכה"}</span>
         </nav>
 
         {/* Header */}
         <header className="mb-6 pb-5 border-b border-border">
           <div className="flex items-center gap-2 mb-2">
-            <BookOpen className="h-5 w-5 text-gold" />
+            {expandMode ? <Sparkles className="h-5 w-5 text-gold" /> : <BookOpen className="h-5 w-5 text-gold" />}
             <Badge variant="outline" className="border-gold/40 text-gold-deep bg-gold/5">
-              {isNew ? "יצירת ערך חדש" : "עריכה"}
+              {isNew ? "יצירת ערך חדש" : expandMode ? "הרחבת קצרמר" : "עריכה"}
             </Badge>
+            {isStubEntry && !expandMode && (
+              <Badge variant="outline" className="border-gold/40 text-gold-deep bg-gold/5">קצרמר</Badge>
+            )}
           </div>
           <h1 className="heading-display text-3xl md:text-4xl text-primary leading-tight">
-            {isNew ? "כתיבת ערך חדש" : `עריכה: ${existing?.title}`}
+            {isNew ? "כתיבת ערך חדש" : expandMode ? `הרחבה: ${title || existing?.title || slug}` : `עריכה: ${existing?.title}`}
           </h1>
           <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
             כל הגשה עוברת בדיקה של עורך לפני פרסום. כתבו בעברית פשוטה ומכובדת, התאימו את התוכן לציבור החרדי, וצרו קישורים פנימיים בין ערכים בעזרת התחביר{" "}
             <code className="rtl:font-mono text-xs bg-secondary px-1.5 py-0.5 rounded">[[שם-הערך]]</code>.
           </p>
+
+          {/* Stub detected — offer expansion mode toggle */}
+          {isStubEntry && (
+            <div className="mt-4 rounded-xl bg-gold/10 border border-gold/40 p-4 flex items-start gap-3">
+              <Sparkles className="h-5 w-5 text-gold-deep mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-sm font-medium text-foreground/90 m-0">
+                    ערך זה הוא קצרמר. עזרו להרחיב אותו במסלול מובנה.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant={expandMode ? "outline" : "default"}
+                    onClick={() => setExpandMode(m => !m)}
+                  >
+                    {expandMode ? "מעבר לעריכה חופשית" : "מצב הרחבה מובנה"}
+                  </Button>
+                </div>
+                {expandMode && (
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between text-xs text-foreground/80 mb-1.5">
+                      <span>התקדמות הרחבה</span>
+                      <span className="font-medium">{completed}/3 שדות הושלמו</span>
+                    </div>
+                    <Progress value={progressPct} className="h-2 bg-background" />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </header>
 
         {/* Tabs: Edit / Preview */}
@@ -206,7 +320,101 @@ export default function EditEntry() {
           ))}
         </div>
 
-        {mode === "edit" ? (
+        {mode === "edit" && expandMode ? (
+          /* ===================== STUB EXPANSION MODE ===================== */
+          <div className="grid lg:grid-cols-[1fr_280px] gap-6">
+            <div className="space-y-5 min-w-0">
+              <ExpandField
+                index={1}
+                title="הגדרה"
+                helper="משפט אחד או שניים שמסבירים בקצרה מהו הערך. כתבו כאילו אתם עונים למישהו ששואל 'מה זה?'"
+                value={defField}
+                onChange={setDefField}
+                placeholder="לדוגמה: קרן השתלמות היא מכשיר חיסכון לטווח בינוני המוכר על ידי המעסיק והעובד..."
+                minChars={MIN_DEF}
+                ok={defOk}
+                rows={3}
+              />
+              <ExpandField
+                index={2}
+                title="הסבר"
+                helper="הרחיבו: איך זה עובד, מתי משתמשים בזה, מה חשוב לדעת. אפשר להוסיף קישורים פנימיים בתחביר [[slug]]."
+                value={explField}
+                onChange={setExplField}
+                placeholder="הסבירו בצורה רחבה יותר את הערך, עקרונות הפעולה, מי משתמש בו ומתי..."
+                minChars={MIN_EXPL}
+                ok={explOk}
+                rows={8}
+              />
+              <ExpandField
+                index={3}
+                title="דוגמה"
+                helper="דוגמה מספרית או סיפורית מהחיים, שעוזרת להבין את הערך הלכה למעשה."
+                value={exField}
+                onChange={setExField}
+                placeholder="לדוגמה: ראובן מפקיד 1,000 ש&quot;ח בחודש לקרן השתלמות..."
+                minChars={MIN_EX}
+                ok={exOk}
+                rows={5}
+              />
+
+              {/* Change summary */}
+              <div>
+                <Label htmlFor="change-summary" className="mb-1.5 block">תקציר עריכה <span className="text-destructive">*</span></Label>
+                <Input
+                  id="change-summary"
+                  value={changeSummary}
+                  onChange={e => setChangeSummary(e.target.value)}
+                  placeholder='לדוגמה: "הרחבה ראשונית של הקצרמר על בסיס מקורות..."'
+                />
+              </div>
+
+              {/* Submit */}
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
+                <Link to={`/entry/${slug}`}>
+                  <Button variant="ghost">ביטול</Button>
+                </Link>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" onClick={() => { setExpandMode(false); }}>
+                    מעבר לעריכה חופשית
+                  </Button>
+                  <Button onClick={handleSubmit} disabled={submitting || completed < 3}>
+                    <Save className="h-4 w-4" /> {submitting ? "שולח…" : "שליחת הרחבה לבדיקה"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Progress sidebar */}
+            <aside className="space-y-4">
+              <div className="rounded-xl bg-card border border-border p-5 shadow-card sticky top-24">
+                <h3 className="font-display font-semibold text-primary mb-3 text-sm uppercase tracking-wider">התקדמות הרחבה</h3>
+                <Progress value={progressPct} className="h-2 mb-4" />
+                <ul className="space-y-2.5 text-sm">
+                  {[
+                    { label: "הגדרה", ok: defOk, min: MIN_DEF, len: defField.trim().length },
+                    { label: "הסבר", ok: explOk, min: MIN_EXPL, len: explField.trim().length },
+                    { label: "דוגמה", ok: exOk, min: MIN_EX, len: exField.trim().length },
+                  ].map(item => (
+                    <li key={item.label} className="flex items-center gap-2">
+                      {item.ok
+                        ? <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                        : <Circle className="h-4 w-4 text-muted-foreground shrink-0" />
+                      }
+                      <span className={cn("font-medium", item.ok ? "text-foreground" : "text-muted-foreground")}>{item.label}</span>
+                      <span className="text-xs text-muted-foreground mr-auto">
+                        {item.len}/{item.min}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground mt-4 leading-relaxed">
+                  לאחר השלמת שלושת השדות והגשה, התג <b>קצרמר</b> יוסר אוטומטית עם אישור העורך.
+                </p>
+              </div>
+            </aside>
+          </div>
+        ) : mode === "edit" ? (
           <div className="grid lg:grid-cols-[1fr_280px] gap-6">
             <div className="space-y-5 min-w-0">
               {/* Stub toggle - only for new entries */}
@@ -395,7 +603,19 @@ export default function EditEntry() {
               <Button size="sm" variant="outline" onClick={() => setMode("edit")}>חזרה לעריכה</Button>
             </div>
             <h1 className="heading-display text-3xl md:text-4xl text-primary mb-3">{title || "ללא כותרת"}</h1>
-            {summary && (
+            {expandMode ? (
+              <>
+                {defField && (
+                  <div className="rounded-xl bg-secondary/60 border-r-4 border-gold p-4 mb-5">
+                    <p className="text-base leading-[1.85] text-foreground/90 m-0">{defField}</p>
+                  </div>
+                )}
+                <WikiText
+                  text={`## הסבר\n\n${explField}\n\n## דוגמה\n\n${exField}`}
+                  className="text-foreground/90 leading-[1.95] text-[17px] whitespace-pre-wrap"
+                />
+              </>
+            ) : (<>{summary && (
               <div className="rounded-xl bg-secondary/60 border-r-4 border-gold p-4 mb-5">
                 <p className="text-base leading-[1.85] text-foreground/90 m-0">{summary}</p>
               </div>
@@ -403,7 +623,7 @@ export default function EditEntry() {
             {content
               ? <WikiText text={content} className="text-foreground/90 leading-[1.95] text-[17px] whitespace-pre-wrap" />
               : <p className="text-muted-foreground italic">אין עדיין תוכן להצגה.</p>
-            }
+            }</>)}
           </div>
         )}
       </div>
@@ -421,5 +641,48 @@ function ToolbarBtn({ children, title, onClick }: { children: React.ReactNode; t
     >
       {children}
     </button>
+  );
+}
+
+function ExpandField({
+  index, title, helper, value, onChange, placeholder, minChars, ok, rows,
+}: {
+  index: number;
+  title: string;
+  helper: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  minChars: number;
+  ok: boolean;
+  rows: number;
+}) {
+  const len = value.trim().length;
+  return (
+    <div className={cn(
+      "rounded-xl border p-4 transition-colors",
+      ok ? "border-emerald-600/40 bg-emerald-50/40 dark:bg-emerald-950/20" : "border-border bg-card"
+    )}>
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className={cn(
+          "inline-flex items-center justify-center h-6 w-6 rounded-full text-xs font-bold",
+          ok ? "bg-emerald-600 text-white" : "bg-secondary text-foreground/70"
+        )}>{ok ? "✓" : index}</span>
+        <Label className="text-base font-semibold text-primary m-0">
+          {title} <span className="text-destructive text-sm">*</span>
+        </Label>
+        <span className={cn("text-xs mr-auto", ok ? "text-emerald-700" : "text-muted-foreground")}>
+          {len}/{minChars} תווים
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground leading-relaxed mb-2">{helper}</p>
+      <Textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        rows={rows}
+        placeholder={placeholder}
+        className="font-[Assistant] text-[15px] leading-[1.85] resize-y bg-background"
+      />
+    </div>
   );
 }
