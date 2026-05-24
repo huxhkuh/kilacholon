@@ -807,7 +807,7 @@ function ToolbarBtn({ children, title, onClick }: { children: React.ReactNode; t
 }
 
 function ExpandField({
-  index, title, helper, value, onChange, placeholder, minChars, ok, rows,
+  index, title, helper, value, onChange, placeholder, minChars, ok, rows, inputRef, headerExtra,
 }: {
   index: number;
   title: string;
@@ -818,6 +818,8 @@ function ExpandField({
   minChars: number;
   ok: boolean;
   rows: number;
+  inputRef?: React.RefObject<HTMLTextAreaElement>;
+  headerExtra?: React.ReactNode;
 }) {
   const len = value.trim().length;
   return (
@@ -836,9 +838,11 @@ function ExpandField({
         <span className={cn("text-xs mr-auto", ok ? "text-emerald-700" : "text-muted-foreground")}>
           {len}/{minChars} תווים
         </span>
+        {headerExtra}
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed mb-2">{helper}</p>
       <Textarea
+        ref={inputRef}
         value={value}
         onChange={e => onChange(e.target.value)}
         rows={rows}
