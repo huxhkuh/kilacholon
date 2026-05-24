@@ -405,6 +405,71 @@ export default function EditEntry() {
                 minChars={MIN_EXPL}
                 ok={explOk}
                 rows={8}
+                inputRef={explTextareaRef}
+                headerExtra={
+                  <Popover open={explLinkOpen} onOpenChange={setExplLinkOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 h-7 px-2 rounded text-xs font-medium border border-border bg-background hover:bg-secondary transition-colors"
+                        title="קישור פנימי או יצירת ערך חדש"
+                      >
+                        <Link2 className="h-3.5 w-3.5" /> קישור / ערך חדש
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-80 p-0">
+                      <Command>
+                        <CommandInput
+                          placeholder="חיפוש ערך, או כתבו שם חדש ליצירה..."
+                          value={explLinkQuery}
+                          onValueChange={setExplLinkQuery}
+                        />
+                        <CommandList>
+                          <CommandEmpty>
+                            {explLinkQuery.trim() ? (
+                              <button
+                                type="button"
+                                disabled={creatingStub}
+                                onClick={async () => {
+                                  const created = await createStubInline(explLinkQuery);
+                                  if (created) insertWikiLinkExpl(created.slug, created.title);
+                                }}
+                                className="mx-auto inline-flex items-center gap-2 px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm hover:bg-primary/90 disabled:opacity-60"
+                              >
+                                <Plus className="h-4 w-4" />
+                                {creatingStub ? "יוצר…" : `יצירת קצרמר: "${explLinkQuery.trim()}"`}
+                              </button>
+                            ) : (
+                              <span className="text-muted-foreground">הקלידו שם ערך</span>
+                            )}
+                          </CommandEmpty>
+                          <CommandGroup heading="ערכים באתר">
+                            {linkableEntries.map(e => (
+                              <CommandItem key={e.slug} value={`${e.title} ${e.slug}`} onSelect={() => insertWikiLinkExpl(e.slug, e.title)}>
+                                <span className="font-medium">{e.title}</span>
+                                <span className="text-xs text-muted-foreground mr-auto">{e.slug}</span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                          {explLinkQuery.trim() && (
+                            <CommandGroup heading="חדש">
+                              <CommandItem
+                                value={`__create__ ${explLinkQuery}`}
+                                onSelect={async () => {
+                                  const created = await createStubInline(explLinkQuery);
+                                  if (created) insertWikiLinkExpl(created.slug, created.title);
+                                }}
+                              >
+                                <Plus className="h-4 w-4 ml-1" />
+                                <span className="font-medium">יצירת קצרמר חדש: "{explLinkQuery.trim()}"</span>
+                              </CommandItem>
+                            </CommandGroup>
+                          )}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                }
               />
               <ExpandField
                 index={3}
