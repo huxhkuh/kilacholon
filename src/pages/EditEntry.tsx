@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowRight, Bold, Italic, Link2, List, ListOrdered, Heading2, Save, Eye, AlertTriangle, BookOpen, FileQuestion, Sparkles, CheckCircle2, Circle } from "lucide-react";
+import { ArrowRight, Bold, Italic, Link2, List, ListOrdered, Heading2, Save, Eye, AlertTriangle, BookOpen, FileQuestion, Sparkles, CheckCircle2, Circle, Plus } from "lucide-react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +44,10 @@ export default function EditEntry() {
   const [submitting, setSubmitting] = useState(false);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const [isStub, setIsStub] = useState(false);
+  const [linkQuery, setLinkQuery] = useState("");
+  const [explLinkOpen, setExplLinkOpen] = useState(false);
+  const [explLinkQuery, setExplLinkQuery] = useState("");
+  const [creatingStub, setCreatingStub] = useState(false);
 
   // ---------- Stub expansion workflow ----------
   const [stubRevisionId, setStubRevisionId] = useState<string | null>(null);
@@ -65,6 +69,7 @@ export default function EditEntry() {
   const progressPct = Math.round((completed / 3) * 100);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const explTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     document.title = isNew ? `ערך חדש — פדיה פיננסית` : `עריכה: ${existing?.title} — פדיה פיננסית`;
@@ -142,6 +147,61 @@ export default function EditEntry() {
       ta.focus();
       ta.selectionStart = ta.selectionEnd = start + snippet.length;
     });
+  }
+
+  function insertWikiLinkExpl(linkSlug: string, label?: string) {
+    const text = label ?? "";
+    const snippet = text && text !== linkSlug ? `[[${linkSlug}|${text}]]` : `[[${linkSlug}]]`;
+    const ta = explTextareaRef.current;
+    if (!ta) {
+      setExplField(v => (v ? v + " " : "") + snippet);
+    } else {
+      const s = ta.selectionStart, e = ta.selectionEnd;
+      const next = explField.slice(0, s) + snippet + explField.slice(e);
+      setExplField(next);
+      requestAnimationFrame(() => {
+        ta.focus();
+        ta.selectionStart = ta.selectionEnd = s + snippet.length;
+      });
+    }
+    setExplLinkOpen(false);
+    setExplLinkQuery("");
+  }
+
+  function slugify(t: string) {
+    return t.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\u0590-\u05FF\-]/g, "");
+  }
+
+  // Create a new stub entry on the fly and return its slug
+  async function createStubInline(rawTitle: string): Promise<{ slug: string; title: string } | null> {
+    if (!user) { navigate("/auth"); return null; }
+    const t = rawTitle.trim();
+    if (!t) return null;
+    const newSlug = slugify(t);
+    if (!newSlug) { toast.error("שם הערך לא תקין"); return null; }
+    // Avoid clashing with an existing static entry
+    if (allEntries.some(e => e.slug === newSlug)) {
+      toast.message("הערך כבר קיים — קישור הוספה");
+      return { slug: newSlug, title: t };
+    }
+    setCreatingStub(true);
+    const stubSummary = "ערך זה הוא קצרמר. אתם מוזמנים להרחיב אותו.";
+    const stubContent = `## ${t}\n\nזהו ערך ריק (קצרמר) שעדיין לא נכתב.\n\nאתם מוזמנים [לערוך](/edit/${newSlug}) ולהוסיף תוכן.`;
+    const { error } = await supabase.from("entry_revisions").insert({
+      entry_slug: newSlug,
+      title: t,
+      category,
+      summary: stubSummary,
+      content: stubContent,
+      tags: ["קצרמר"],
+      change_summary: "יצירת קצרמר תוך כדי עריכת ערך אחר",
+      is_new_entry: true,
+      author_id: user.id,
+    });
+    setCreatingStub(false);
+    if (error) { toast.error("שגיאה ביצירת הקצרמר: " + error.message); return null; }
+    toast.success(`נוצר קצרמר חדש: "${t}" — ממתין לאישור עורך`);
+    return { slug: newSlug, title: t };
   }
 
   // ---------- Submit ----------
@@ -513,9 +573,31 @@ export default function EditEntry() {
                       </PopoverTrigger>
                       <PopoverContent align="start" className="w-80 p-0">
                         <Command>
-                          <CommandInput placeholder="חיפוש ערך לקישור..." />
+                          <CommandInput
+                            placeholder="חיפוש ערך, או כתבו שם חדש ליצירה..."
+                            value={linkQuery}
+                            onValueChange={setLinkQuery}
+                          />
                           <CommandList>
-                            <CommandEmpty>לא נמצאו ערכים.</CommandEmpty>
+                            <CommandEmpty>
+                              {linkQuery.trim() ? (
+                                <button
+                                  type="button"
+                                  disabled={creatingStub}
+                                  onClick={async () => {
+                                    const created = await createStubInline(linkQuery);
+                                    if (created) insertWikiLink(created.slug, created.title);
+                                    setLinkQuery("");
+                                  }}
+                                  className="mx-auto inline-flex items-center gap-2 px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm hover:bg-primary/90 disabled:opacity-60"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                  {creatingStub ? "יוצר…" : `יצירת קצרמר: "${linkQuery.trim()}"`}
+                                </button>
+                              ) : (
+                                <span className="text-muted-foreground">הקלידו שם ערך</span>
+                              )}
+                            </CommandEmpty>
                             <CommandGroup heading="ערכים באתר">
                               {linkableEntries.map(e => (
                                 <CommandItem key={e.slug} value={`${e.title} ${e.slug}`} onSelect={() => insertWikiLink(e.slug, e.title)}>
@@ -524,6 +606,21 @@ export default function EditEntry() {
                                 </CommandItem>
                               ))}
                             </CommandGroup>
+                            {linkQuery.trim() && (
+                              <CommandGroup heading="חדש">
+                                <CommandItem
+                                  value={`__create__ ${linkQuery}`}
+                                  onSelect={async () => {
+                                    const created = await createStubInline(linkQuery);
+                                    if (created) insertWikiLink(created.slug, created.title);
+                                    setLinkQuery("");
+                                  }}
+                                >
+                                  <Plus className="h-4 w-4 ml-1" />
+                                  <span className="font-medium">יצירת קצרמר חדש: "{linkQuery.trim()}"</span>
+                                </CommandItem>
+                              </CommandGroup>
+                            )}
                           </CommandList>
                         </Command>
                       </PopoverContent>
