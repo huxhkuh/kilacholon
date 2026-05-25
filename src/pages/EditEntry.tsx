@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowRight, Bold, Italic, Link2, List, ListOrdered, Heading2, Save, Eye, AlertTriangle, BookOpen, FileQuestion, Sparkles, CheckCircle2, Circle, Plus } from "lucide-react";
+import { ArrowRight, Bold, Italic, Link2, List, ListOrdered, Heading2, Heading3, Save, Eye, AlertTriangle, BookOpen, FileQuestion, Sparkles, CheckCircle2, Circle, Plus, Quote, Minus, Link as LinkIcon, HelpCircle, FileCode, Sigma } from "lucide-react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -618,11 +618,17 @@ export default function EditEntry() {
                   {/* Toolbar */}
                   <div className="flex flex-wrap items-center gap-1 border-b border-border bg-secondary/40 p-1.5">
                     <ToolbarBtn title="כותרת משנה" onClick={() => insertAtLineStart("## ")}><Heading2 className="h-4 w-4" /></ToolbarBtn>
-                    <ToolbarBtn title="מודגש" onClick={() => wrapSelection("**")}><Bold className="h-4 w-4" /></ToolbarBtn>
-                    <ToolbarBtn title="נטוי" onClick={() => wrapSelection("*")}><Italic className="h-4 w-4" /></ToolbarBtn>
+                    <ToolbarBtn title="כותרת תת-פרק" onClick={() => insertAtLineStart("=== ")}><Heading3 className="h-4 w-4" /></ToolbarBtn>
+                    <ToolbarBtn title="מודגש ('''טקסט''')" onClick={() => wrapSelection("'''")}><Bold className="h-4 w-4" /></ToolbarBtn>
+                    <ToolbarBtn title="נטוי (''טקסט'')" onClick={() => wrapSelection("''")}><Italic className="h-4 w-4" /></ToolbarBtn>
                     <span className="w-px h-5 bg-border mx-1" />
-                    <ToolbarBtn title="רשימה" onClick={() => insertAtLineStart("- ")}><List className="h-4 w-4" /></ToolbarBtn>
-                    <ToolbarBtn title="רשימה ממוספרת" onClick={() => insertAtLineStart("1. ")}><ListOrdered className="h-4 w-4" /></ToolbarBtn>
+                    <ToolbarBtn title="רשימת תבליטים" onClick={() => insertAtLineStart("* ")}><List className="h-4 w-4" /></ToolbarBtn>
+                    <ToolbarBtn title="רשימה ממוספרת" onClick={() => insertAtLineStart("# ")}><ListOrdered className="h-4 w-4" /></ToolbarBtn>
+                    <ToolbarBtn title="ציטוט" onClick={() => wrapSelection("<blockquote>", "</blockquote>")}><Quote className="h-4 w-4" /></ToolbarBtn>
+                    <ToolbarBtn title="קו אופקי" onClick={() => insertAtLineStart("\n----\n")}><Minus className="h-4 w-4" /></ToolbarBtn>
+                    <ToolbarBtn title="קוד מקור" onClick={() => wrapSelection("<pre>", "</pre>")}><FileCode className="h-4 w-4" /></ToolbarBtn>
+                    <ToolbarBtn title="קישור חיצוני" onClick={() => wrapSelection("[https://", " טקסט]")}><LinkIcon className="h-4 w-4" /></ToolbarBtn>
+                    <ToolbarBtn title="תבנית (ש, ערך מורחב, ציטוט…)" onClick={() => wrapSelection("{{", "}}")}><Sigma className="h-4 w-4" /></ToolbarBtn>
                     <span className="w-px h-5 bg-border mx-1" />
 
                     {/* Wiki link picker */}
@@ -691,9 +697,9 @@ export default function EditEntry() {
                       </PopoverContent>
                     </Popover>
 
-                    <span className="text-xs text-muted-foreground mr-auto px-2">
-                      תחביר קישור: <code className="bg-background px-1 rounded">[[slug]]</code> או <code className="bg-background px-1 rounded">[[slug|תווית]]</code>
-                    </span>
+                    <Link to="/help/wiki-syntax" target="_blank" className="inline-flex items-center gap-1 mr-auto px-2 text-xs text-muted-foreground hover:text-primary">
+                      <HelpCircle className="h-3.5 w-3.5" /> מדריך תחביר ויקי
+                    </Link>
                   </div>
                   <Textarea
                     id="content"
