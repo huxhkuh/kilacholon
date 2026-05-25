@@ -15,6 +15,7 @@ import Auth from "./pages/Auth.tsx";
 import Profile from "./pages/Profile.tsx";
 import AdminUsers from "./pages/AdminUsers.tsx";
 import EditEntry from "./pages/EditEntry.tsx";
+import HelpWikiSyntax from "./pages/HelpWikiSyntax.tsx";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,7 @@ const App = () => (
             <Route path="/entry/:slug" element={<EntryPage />} />
             <Route path="/edit/:slug" element={<EditEntry />} />
             <Route path="/edit" element={<EditEntry />} />
+            <Route path="/help/wiki-syntax" element={<HelpWikiSyntax />} />
             <Route path="/dictionary" element={<Dictionary />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/auth" element={<Auth />} />
