@@ -26,7 +26,7 @@ export default function HistorySection({ slug }: { slug: string }) {
       .select("id, change_summary, status, is_new_entry, created_at, profiles:author_id(display_name)")
       .eq("entry_slug", slug)
       .order("created_at", { ascending: false })
-      .then(({ data }) => setRevisions((data as any) ?? []));
+      .then(({ data }) => setRevisions((data ?? []) as unknown as Rev[]));
   }, [slug]);
 
   if (revisions.length === 0) {

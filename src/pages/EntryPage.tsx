@@ -1,19 +1,21 @@
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { Eye, Calendar, ArrowRight, CheckCircle2, XCircle, Lightbulb, BookOpen, MessageCircle, FileText, History, Pencil } from "lucide-react";
+import { Calendar, ArrowRight, CheckCircle2, XCircle, Lightbulb, BookOpen, MessageCircle, FileText, History, Pencil } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import Layout from "@/components/Layout";
-import AdSlot from "@/components/AdSlot";
 import EntryCard from "@/components/EntryCard";
 import Infobox from "@/components/wiki/Infobox";
 import WikiText from "@/components/wiki/WikiText";
 import TalkSection from "@/components/wiki/TalkSection";
 import HistorySection from "@/components/wiki/HistorySection";
-import { getEntry, getCategory, entries as allEntries } from "@/data/content";
+import { getEntry, getCategory } from "@/data/content";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { usePublishedEntries } from "@/hooks/usePublishedEntries";
 import { cn } from "@/lib/utils";
+import { useReadEntries } from "@/hooks/useReadEntries";
 
 type Tab = "article" | "talk" | "history";
 
@@ -21,23 +23,38 @@ export default function EntryPage() {
   const { slug = "" } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const entry = getEntry(slug);
+  const { entries, isLoading } = usePublishedEntries();
+  const { markRead } = useReadEntries();
+  const entry = getEntry(slug, entries);
   const category = entry ? getCategory(entry.category) : undefined;
-  const related = entry ? entry.related.map(s => allEntries.find(e => e.slug === s)).filter(Boolean) : [];
+  const related = entry ? entry.related.map(s => entries.find(e => e.slug === s)).filter(Boolean) : [];
 
   const params = new URLSearchParams(window.location.search);
   const tab = (params.get("tab") as Tab) || "article";
 
   useEffect(() => {
-    if (entry) document.title = `${entry.title} — פדיה פיננסית`;
-  }, [entry]);
+    if (!entry) return;
+
+    const description = entry.shortDescription.slice(0, 155);
+    const canonical = new URL(`/entry/${entry.slug}`, window.location.origin).href;
+    document.title = `${entry.title} — מיכלכלה`;
+    document.querySelector('meta[name="description"]')?.setAttribute("content", description);
+    document.querySelector('meta[property="og:title"]')?.setAttribute("content", document.title);
+    document.querySelector('meta[property="og:description"]')?.setAttribute("content", description);
+    document.querySelector('link[rel="canonical"]')?.setAttribute("href", canonical);
+    markRead(entry.slug);
+  }, [entry, markRead]);
+
+  if (!entry && isLoading) {
+    return <Layout><div className="container py-24 text-center text-muted-foreground">טוען ערך...</div></Layout>;
+  }
 
   if (!entry) {
     return (
       <Layout>
         <div className="container py-24 text-center">
           <h1 className="heading-display text-3xl text-primary mb-4">הערך לא נמצא</h1>
-          <Link to="/"><Button>חזרה לעמוד הבית</Button></Link>
+          <Button asChild><Link to="/">חזרה לעמוד הבית</Link></Button>
         </div>
       </Layout>
     );
@@ -46,15 +63,15 @@ export default function EntryPage() {
   const sections = [
     { id: "summary", label: "תקציר" },
     { id: "full", label: "הסבר מלא" },
-    { id: "why", label: "למה זה חשוב?" },
-    { id: "example", label: "דוגמה" },
-    { id: "pros-cons", label: "יתרונות וחסרונות" },
-    { id: "faq", label: "שאלות נפוצות" },
-    { id: "related", label: "ערכים קשורים" },
+    ...(entry.whyImportant ? [{ id: "why", label: "למה זה חשוב?" }] : []),
+    ...(entry.example ? [{ id: "example", label: "דוגמה" }] : []),
+    ...(entry.pros.length || entry.cons.length ? [{ id: "pros-cons", label: "יתרונות וחסרונות" }] : []),
+    ...(entry.faq.length ? [{ id: "faq", label: "שאלות נפוצות" }] : []),
+    ...(related.length ? [{ id: "related", label: "ערכים קשורים" }] : []),
   ];
 
-  const tabs: { id: Tab; label: string; icon: any }[] = [
-    { id: "article", label: "מאמר", icon: FileText },
+  const tabs: { id: Tab; label: string; icon: LucideIcon }[] = [
+    { id: "article", label: "ערך", icon: FileText },
     { id: "talk", label: "דיון", icon: MessageCircle },
     { id: "history", label: "היסטוריה", icon: History },
   ];
@@ -102,7 +119,7 @@ export default function EntryPage() {
             ))}
           </div>
           <Button size="sm" variant="outline" onClick={handleEdit} className="mb-1">
-            <Pencil className="h-3.5 w-3.5" /> עריכה
+            <Pencil className="h-3.5 w-3.5" /> הצעת עריכה
           </Button>
         </div>
 
@@ -122,10 +139,18 @@ export default function EntryPage() {
                   </div>
                   <h1 className="heading-display text-3xl sm:text-4xl md:text-5xl text-primary leading-tight mb-3 text-balance">{entry.title}</h1>
                   <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1.5"><Eye className="h-4 w-4" />{entry.views.toLocaleString("he-IL")} צפיות</span>
                     <span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" />עודכן ב-{new Date(entry.updatedAt).toLocaleDateString("he-IL")}</span>
                   </div>
                 </header>
+
+                <div className="mb-7 rounded-xl border border-border bg-accent/25 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <p className="text-sm text-foreground/85 leading-relaxed m-0">
+                    זהו ערך באנציקלופדיה שיתופית. מצאתם ניסוח חסר, מקור מועיל או קישור לערך אחר?
+                  </p>
+                  <Button size="sm" variant="outline" onClick={handleEdit} className="shrink-0">
+                    <Pencil className="h-3.5 w-3.5" /> שפרו את הערך
+                  </Button>
+                </div>
 
                 {/* תקציר */}
                 <section id="summary" className="mb-8 scroll-mt-20">
@@ -139,31 +164,29 @@ export default function EntryPage() {
                   <h2 className="heading-display text-2xl md:text-3xl text-primary mb-3 pb-1.5 border-b border-border flex items-center gap-2">
                     <BookOpen className="h-5 w-5 text-gold" /> הסבר מלא
                   </h2>
-                  <WikiText text={entry.fullDescription} className="text-foreground/90 leading-[1.95] text-[17px]" />
+                  <WikiText text={entry.fullDescription} knownEntries={entries} className="text-foreground/90 leading-[1.95] text-[17px]" />
                 </section>
 
-                <div className="my-8"><AdSlot variant="inline" /></div>
-
                 {/* למה חשוב */}
-                <section id="why" className="mb-8 scroll-mt-20">
+                {entry.whyImportant && <section id="why" className="mb-8 scroll-mt-20">
                   <h2 className="heading-display text-2xl md:text-3xl text-primary mb-3 pb-1.5 border-b border-border">למה זה חשוב?</h2>
                   <div className="rounded-xl bg-gradient-to-l from-accent/60 to-secondary/40 p-6 border border-gold/20">
                     <p className="text-base md:text-lg leading-[1.85] text-foreground/90 m-0">{entry.whyImportant}</p>
                   </div>
-                </section>
+                </section>}
 
                 {/* דוגמה */}
-                <section id="example" className="mb-8 scroll-mt-20">
+                {entry.example && <section id="example" className="mb-8 scroll-mt-20">
                   <h2 className="heading-display text-2xl md:text-3xl text-primary mb-3 pb-1.5 border-b border-border flex items-center gap-2">
                     <Lightbulb className="h-5 w-5 text-gold" /> דוגמה פשוטה
                   </h2>
                   <div className="rounded-xl bg-card border border-border p-6 shadow-card">
                     <p className="text-base leading-[1.85] text-foreground/90 m-0">{entry.example}</p>
                   </div>
-                </section>
+                </section>}
 
                 {/* יתרונות וחסרונות */}
-                <section id="pros-cons" className="mb-8 scroll-mt-20">
+                {(entry.pros.length > 0 || entry.cons.length > 0) && <section id="pros-cons" className="mb-8 scroll-mt-20">
                   <h2 className="heading-display text-2xl md:text-3xl text-primary mb-3 pb-1.5 border-b border-border">יתרונות וחסרונות</h2>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/40 p-5">
@@ -179,10 +202,10 @@ export default function EntryPage() {
                       </ul>
                     </div>
                   </div>
-                </section>
+                </section>}
 
                 {/* FAQ */}
-                <section id="faq" className="mb-8 scroll-mt-20">
+                {entry.faq.length > 0 && <section id="faq" className="mb-8 scroll-mt-20">
                   <h2 className="heading-display text-2xl md:text-3xl text-primary mb-3 pb-1.5 border-b border-border">שאלות נפוצות</h2>
                   <Accordion type="single" collapsible className="rounded-xl border border-border bg-card overflow-hidden">
                     {entry.faq.map((f, i) => (
@@ -192,7 +215,7 @@ export default function EntryPage() {
                       </AccordionItem>
                     ))}
                   </Accordion>
-                </section>
+                </section>}
 
                 {related.length > 0 && (
                   <section id="related" className="mb-8 scroll-mt-20">
@@ -241,7 +264,6 @@ export default function EntryPage() {
                 </ul>
               </nav>
             )}
-            <div className="hidden lg:block"><AdSlot variant="sidebar" /></div>
           </aside>
         </div>
       </article>

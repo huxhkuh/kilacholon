@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
 import * as Icons from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { Category } from "@/data/content";
 import { cn } from "@/lib/utils";
 
 export default function CategoryCard({ category, count }: { category: Category; count?: number }) {
-  const Icon = (Icons as any)[category.icon] || Icons.Folder;
+  const Icon = (Icons[category.icon as keyof typeof Icons] as LucideIcon | undefined) || Icons.Folder;
 
   return (
     <Link

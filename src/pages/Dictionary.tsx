@@ -1,14 +1,18 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Search } from "lucide-react";
+import { CheckCircle2, Search } from "lucide-react";
 import Layout from "@/components/Layout";
 import { Input } from "@/components/ui/input";
-import { entries, getCategory } from "@/data/content";
+import { getCategory, type Entry } from "@/data/content";
 import { Badge } from "@/components/ui/badge";
+import { usePublishedEntries } from "@/hooks/usePublishedEntries";
+import { useReadEntries } from "@/hooks/useReadEntries";
 
 const HE_LETTERS = ["א","ב","ג","ד","ה","ו","ז","ח","ט","י","כ","ל","מ","נ","ס","ע","פ","צ","ק","ר","ש","ת"];
 
 export default function Dictionary() {
+  const { entries } = usePublishedEntries();
+  const { isRead, readCount } = useReadEntries();
   const [query, setQuery] = useState("");
 
   const grouped = useMemo(() => {
@@ -16,14 +20,14 @@ export default function Dictionary() {
       ? entries.filter(e => e.title.includes(query.trim()) || e.shortDescription.includes(query.trim()))
       : entries;
     const sorted = [...filtered].sort((a, b) => a.title.localeCompare(b.title, 'he'));
-    const map = new Map<string, typeof entries>();
+    const map = new Map<string, Entry[]>();
     for (const e of sorted) {
       const letter = e.title.charAt(0);
       if (!map.has(letter)) map.set(letter, []);
       map.get(letter)!.push(e);
     }
     return map;
-  }, [query]);
+  }, [entries, query]);
 
   const availableLetters = Array.from(grouped.keys());
 
@@ -34,8 +38,9 @@ export default function Dictionary() {
           <span className="gold-divider mb-4" />
           <h1 className="heading-display text-3xl md:text-5xl text-primary mb-3">מילון מושגים</h1>
           <p className="text-muted-foreground text-lg leading-relaxed mb-6">
-            כל המושגים באתר, מסודרים אלפביתית. לחצו על מושג להסבר מלא.
+            כל המושגים באנציקלופדיה השיתופית, מסודרים אלפביתית. לחצו על מושג כדי לקרוא, לערוך ולהרחיב.
           </p>
+          {readCount > 0 && <p className="text-sm text-emerald-700 mb-5">קראתם כבר {readCount} ערכים בדפדפן הזה.</p>}
 
           <div className="relative max-w-xl mx-auto">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -45,6 +50,11 @@ export default function Dictionary() {
               onChange={e => setQuery(e.target.value)}
               className="pr-10 h-12 text-base"
             />
+          </div>
+          <div className="mt-6">
+            <Link to="/edit?draft=1" className="inline-flex items-center rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary-soft transition-colors">
+              חסר מושג? כתבו ערך חדש
+            </Link>
           </div>
         </div>
 
@@ -92,6 +102,11 @@ export default function Dictionary() {
                           {entry.title}
                         </h3>
                         {cat && <Badge variant="secondary" className="bg-accent/60 text-accent-foreground text-[11px]">{cat.name}</Badge>}
+                        {isRead(entry.slug) && (
+                          <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> נקרא
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground leading-relaxed">{entry.shortDescription}</p>
                     </Link>

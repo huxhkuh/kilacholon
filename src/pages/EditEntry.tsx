@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowRight, Bold, Italic, Link2, List, ListOrdered, Heading2, Heading3, Save, Eye, AlertTriangle, BookOpen, FileQuestion, Sparkles, CheckCircle2, Circle, Plus, Quote, Minus, Link as LinkIcon, HelpCircle, FileCode, Sigma } from "lucide-react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -19,31 +19,57 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import WikiText from "@/components/wiki/WikiText";
 import { useAuth } from "@/hooks/useAuth";
+import { usePublishedEntries } from "@/hooks/usePublishedEntries";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { categories, entries as allEntries, getEntry } from "@/data/content";
+import { categories, getEntry } from "@/data/content";
 import { cn } from "@/lib/utils";
 
 type Mode = "edit" | "preview";
 
+type LocalDraft = {
+  title: string;
+  category: string;
+  summary: string;
+  content: string;
+  tagsRaw: string;
+  changeSummary: string;
+  isStub: boolean;
+};
+
+const LOCAL_DRAFT_KEY = "kilacholon:new-entry-draft";
+
+function readLocalDraft(): LocalDraft | null {
+  try {
+    const stored = window.localStorage.getItem(LOCAL_DRAFT_KEY);
+    return stored ? JSON.parse(stored) as LocalDraft : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function EditEntry() {
   const { slug = "" } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, loading: authLoading } = useAuth();
+  const { entries: publishedEntries } = usePublishedEntries();
 
-  const existing = getEntry(slug);
+  const existing = getEntry(slug, publishedEntries);
   const isNew = !existing;
+  const localDraft = useMemo(() => (isNew ? readLocalDraft() : null), [isNew]);
+  const guestDraftMode = isNew && !user && searchParams.get("draft") === "1";
 
-  const [title, setTitle] = useState(existing?.title ?? "");
-  const [category, setCategory] = useState(existing?.category ?? categories[0]?.slug ?? "");
-  const [summary, setSummary] = useState(existing?.shortDescription ?? "");
-  const [content, setContent] = useState(existing?.fullDescription ?? "");
-  const [tagsRaw, setTagsRaw] = useState((existing?.tags ?? []).join(", "));
-  const [changeSummary, setChangeSummary] = useState("");
+  const [title, setTitle] = useState(existing?.title ?? localDraft?.title ?? "");
+  const [category, setCategory] = useState(existing?.category ?? localDraft?.category ?? categories[0]?.slug ?? "");
+  const [summary, setSummary] = useState(existing?.shortDescription ?? localDraft?.summary ?? "");
+  const [content, setContent] = useState(existing?.fullDescription ?? localDraft?.content ?? "");
+  const [tagsRaw, setTagsRaw] = useState((existing?.tags ?? []).join(", ") || localDraft?.tagsRaw || "");
+  const [changeSummary, setChangeSummary] = useState(localDraft?.changeSummary ?? "");
   const [mode, setMode] = useState<Mode>("edit");
   const [submitting, setSubmitting] = useState(false);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
-  const [isStub, setIsStub] = useState(false);
+  const [isStub, setIsStub] = useState(localDraft?.isStub ?? false);
   const [linkQuery, setLinkQuery] = useState("");
   const [explLinkOpen, setExplLinkOpen] = useState(false);
   const [explLinkQuery, setExplLinkQuery] = useState("");
@@ -56,6 +82,7 @@ export default function EditEntry() {
   const [defField, setDefField] = useState("");
   const [explField, setExplField] = useState("");
   const [exField, setExField] = useState("");
+  const initializedSlug = useRef<string | null>(null);
 
   // Minimum chars for each required expansion field
   const MIN_DEF = 20;
@@ -72,12 +99,22 @@ export default function EditEntry() {
   const explTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
-    document.title = isNew ? `ערך חדש — פדיה פיננסית` : `עריכה: ${existing?.title} — פדיה פיננסית`;
+    if (!existing || initializedSlug.current === existing.slug) return;
+    initializedSlug.current = existing.slug;
+    setTitle(existing.title);
+    setCategory(existing.category);
+    setSummary(existing.shortDescription);
+    setContent(existing.fullDescription);
+    setTagsRaw(existing.tags.join(", "));
+  }, [existing]);
+
+  useEffect(() => {
+    document.title = isNew ? `ערך חדש — מיכלכלה` : `עריכה: ${existing?.title} — מיכלכלה`;
   }, [isNew, existing]);
 
   useEffect(() => {
-    if (!authLoading && !user) navigate("/auth");
-  }, [authLoading, user, navigate]);
+    if (!authLoading && !user && !guestDraftMode) navigate("/auth?draft=1");
+  }, [authLoading, user, guestDraftMode, navigate]);
 
   // Detect if the entry being edited is a stub (קצרמר) — fetch latest revision
   useEffect(() => {
@@ -169,7 +206,7 @@ export default function EditEntry() {
   }
 
   function slugify(t: string) {
-    return t.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\u0590-\u05FF\-]/g, "");
+    return t.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\u0590-\u05FF-]/g, "");
   }
 
   // Create a new stub entry on the fly and return its slug
@@ -180,7 +217,7 @@ export default function EditEntry() {
     const newSlug = slugify(t);
     if (!newSlug) { toast.error("שם הערך לא תקין"); return null; }
     // Avoid clashing with an existing static entry
-    if (allEntries.some(e => e.slug === newSlug)) {
+    if (publishedEntries.some(e => e.slug === newSlug)) {
       toast.message("הערך כבר קיים — קישור הוספה");
       return { slug: newSlug, title: t };
     }
@@ -206,10 +243,9 @@ export default function EditEntry() {
 
   // ---------- Submit ----------
   async function handleSubmit() {
-    if (!user) { navigate("/auth"); return; }
-
     // Stub expansion submission
     if (expandMode) {
+      if (!user) { navigate("/auth?draft=1"); return; }
       if (!defOk || !explOk || !exOk) {
         toast.error("נא למלא את שלושת השדות (הגדרה, הסבר, דוגמה) באורך המינימלי");
         return;
@@ -261,7 +297,7 @@ export default function EditEntry() {
     }
 
     const slugForSave = isNew
-      ? title.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\u0590-\u05FF\-]/g, "")
+      ? title.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\u0590-\u05FF-]/g, "")
       : slug;
 
     const stubSummary = "ערך זה הוא קצרמר. אתם מוזמנים להרחיב אותו.";
@@ -269,6 +305,20 @@ export default function EditEntry() {
     const effectiveTags = isStub
       ? Array.from(new Set([...(tagsRaw.split(",").map(t => t.trim()).filter(Boolean)), "קצרמר"]))
       : tagsRaw.split(",").map(t => t.trim()).filter(Boolean);
+
+    if (!user) {
+      window.localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify({
+        title,
+        category,
+        summary,
+        content,
+        tagsRaw,
+        changeSummary,
+        isStub,
+      } satisfies LocalDraft));
+      toast.success("הטיוטה נשמרה במכשיר הזה. התחברו כשתרצו לשלוח אותה לבדיקה.");
+      return;
+    }
 
     setSubmitting(true);
     const { error } = await supabase.from("entry_revisions").insert({
@@ -285,11 +335,12 @@ export default function EditEntry() {
     setSubmitting(false);
 
     if (error) { toast.error("שגיאה בשליחה: " + error.message); return; }
+    if (isNew) window.localStorage.removeItem(LOCAL_DRAFT_KEY);
     toast.success("ההגשה נשלחה לבדיקת עורך. תודה על תרומתך!");
     navigate(isNew ? "/" : `/entry/${slug}`);
   }
 
-  const linkableEntries = useMemo(() => allEntries, []);
+  const linkableEntries = useMemo(() => publishedEntries, [publishedEntries]);
 
   if (authLoading) return <Layout><div className="container py-24 text-center text-muted-foreground">טוען…</div></Layout>;
 
@@ -311,6 +362,16 @@ export default function EditEntry() {
 
         {/* Header */}
         <header className="mb-6 pb-5 border-b border-border">
+          {guestDraftMode && (
+            <div className="mb-5 rounded-xl bg-secondary/55 border border-border p-4 flex items-start justify-between gap-3 flex-wrap">
+              <p className="text-sm text-foreground/85 m-0">
+                מצב טיוטה: כתבו ופתחו תצוגה מקדימה בלי חשבון. הטיוטה תישמר כאן, ולשליחה לבדיקה תידרש התחברות.
+              </p>
+              <Button asChild size="sm" variant="outline">
+                <Link to="/auth?draft=1">התחברות לשליחה</Link>
+              </Button>
+            </div>
+          )}
           <div className="flex items-center gap-2 mb-2">
             {expandMode ? <Sparkles className="h-5 w-5 text-gold" /> : <BookOpen className="h-5 w-5 text-gold" />}
             <Badge variant="outline" className="border-gold/40 text-gold-deep bg-gold/5">
@@ -496,9 +557,7 @@ export default function EditEntry() {
 
               {/* Submit */}
               <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
-                <Link to={`/entry/${slug}`}>
-                  <Button variant="ghost">ביטול</Button>
-                </Link>
+                <Button asChild variant="ghost"><Link to={`/entry/${slug}`}>ביטול</Link></Button>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" onClick={() => { setExpandMode(false); }}>
                     מעבר לעריכה חופשית
@@ -727,15 +786,13 @@ export default function EditEntry() {
 
               {/* Submit */}
               <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
-                <Link to={isNew ? "/" : `/entry/${slug}`}>
-                  <Button variant="ghost">ביטול</Button>
-                </Link>
+                <Button asChild variant="ghost"><Link to={isNew ? "/" : `/entry/${slug}`}>ביטול</Link></Button>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" onClick={() => setMode("preview")} disabled={isStub}>
                     <Eye className="h-4 w-4" /> תצוגה מקדימה
                   </Button>
                   <Button onClick={handleSubmit} disabled={submitting}>
-                    <Save className="h-4 w-4" /> {submitting ? "שולח…" : isStub ? "יצירת קצרמר" : "שליחה לבדיקה"}
+                    <Save className="h-4 w-4" /> {submitting ? "שולח…" : guestDraftMode ? "שמירת טיוטה מקומית" : isStub ? "יצירת קצרמר" : "שליחה לבדיקה"}
                   </Button>
                 </div>
               </div>
@@ -780,6 +837,7 @@ export default function EditEntry() {
                 )}
                 <WikiText
                   text={`## הסבר\n\n${explField}\n\n## דוגמה\n\n${exField}`}
+                  knownEntries={publishedEntries}
                   className="text-foreground/90 leading-[1.95] text-[17px] whitespace-pre-wrap"
                 />
               </>
@@ -789,7 +847,7 @@ export default function EditEntry() {
               </div>
             )}
             {content
-              ? <WikiText text={content} className="text-foreground/90 leading-[1.95] text-[17px] whitespace-pre-wrap" />
+              ? <WikiText text={content} knownEntries={publishedEntries} className="text-foreground/90 leading-[1.95] text-[17px] whitespace-pre-wrap" />
               : <p className="text-muted-foreground italic">אין עדיין תוכן להצגה.</p>
             }</>)}
           </div>

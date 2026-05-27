@@ -83,9 +83,9 @@ const sections: { title: string; rows: Row[] }[] = [
 
 export default function HelpWikiSyntax() {
   useEffect(() => {
-    document.title = "תחביר ויקי — מדריך עריכה | פדיה פיננסית";
+    document.title = "תחביר ויקי — מדריך עריכה | מיכלכלה";
     const meta = document.querySelector('meta[name="description"]');
-    if (meta) meta.setAttribute("content", "מדריך מקיף לתחביר ויקי בעורך הפדיה הפיננסית: עיצוב טקסט, קישורים, רשימות, תבניות ועוד.");
+    if (meta) meta.setAttribute("content", "מדריך מקיף לתחביר ויקי בעורך מיכלכלה: עיצוב טקסט, קישורים, רשימות, תבניות ועוד.");
   }, []);
 
   return (

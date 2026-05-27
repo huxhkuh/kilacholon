@@ -4,11 +4,13 @@ import Layout from "@/components/Layout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import EntryCard from "@/components/EntryCard";
-import { entries, categories } from "@/data/content";
+import { categories } from "@/data/content";
+import { usePublishedEntries } from "@/hooks/usePublishedEntries";
 
 const LEVELS = ['מתחילים', 'בינוני', 'מתקדם'] as const;
 
 export default function SearchPage() {
+  const { entries } = usePublishedEntries();
   const [query, setQuery] = useState("");
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [activeLevel, setActiveLevel] = useState<string | null>(null);
@@ -27,7 +29,7 @@ export default function SearchPage() {
       );
     }
     return r;
-  }, [query, activeCat, activeLevel]);
+  }, [entries, query, activeCat, activeLevel]);
 
   return (
     <Layout>

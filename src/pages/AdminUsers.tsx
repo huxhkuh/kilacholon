@@ -20,7 +20,7 @@ export default function AdminUsers() {
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
-    document.title = "ניהול משתמשים — פדיה פיננסית";
+    document.title = "ניהול משתמשים — מיכלכלה";
     if (!loading && !isAdmin) navigate("/", { replace: true });
   }, [loading, isAdmin, navigate]);
 
@@ -35,7 +35,7 @@ export default function AdminUsers() {
     ]);
     if (!profiles) return;
     const map = new Map<string, Role[]>();
-    (roleRows ?? []).forEach((r: any) => {
+    (roleRows ?? []).forEach(r => {
       const arr = map.get(r.user_id) ?? [];
       arr.push(r.role); map.set(r.user_id, arr);
     });

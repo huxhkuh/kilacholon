@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Camera, Save, LogOut, Shield } from "lucide-react";
+import { Camera, Save, LogOut, Shield, PenLine } from "lucide-react";
 import { z } from "zod";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, ROLE_LABELS, ROLE_COLORS } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -28,7 +29,7 @@ export default function Profile() {
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    document.title = "הפרופיל שלי — פדיה פיננסית";
+    document.title = "הפרופיל שלי — מיכלכלה";
     if (!loading && !user) navigate("/auth", { replace: true });
   }, [user, loading, navigate]);
 
@@ -80,6 +81,14 @@ export default function Profile() {
 
   if (loading || !user) return <Layout><div className="container py-20 text-center text-muted-foreground">טוען...</div></Layout>;
 
+  const writerLevel = roles.includes("veteran_writer")
+    ? "כותב ותיק"
+    : roles.includes("new_writer")
+      ? "כותב חדש"
+      : "תורם מתחיל";
+  const nextThreshold = roles.includes("veteran_writer") ? null : roles.includes("new_writer") ? 10 : 1;
+  const trustProgress = nextThreshold ? Math.min(100, (contributions / nextThreshold) * 100) : 100;
+
   return (
     <Layout>
       <div className="container max-w-3xl py-12">
@@ -119,6 +128,22 @@ export default function Profile() {
                 <div className="text-2xl font-bold text-primary">{contributions}</div>
                 <div className="text-xs text-muted-foreground mt-1">תרומות מאושרות</div>
               </div>
+            </div>
+
+            <div className="rounded-xl border border-border bg-secondary/25 p-5 mb-8">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <PenLine className="h-4 w-4 text-primary" />
+                  מסלול אמון לכותבים
+                </div>
+                <span className="text-sm text-primary font-medium">{writerLevel}</span>
+              </div>
+              <Progress value={trustProgress} className="h-2 mb-3" />
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {nextThreshold
+                  ? `נדרשות ${nextThreshold} תרומות מאושרות לדרגה הבאה. רק אישור של עורך נספר.`
+                  : "הגעתם לדרגת כותב ותיק. הרשאת אישור תוכן ניתנת בנפרד על ידי מנהל."}
+              </p>
             </div>
 
             <div className="space-y-5">
