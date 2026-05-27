@@ -1,28 +1,30 @@
 import { Link, useParams } from "react-router-dom";
 import * as Icons from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import Layout from "@/components/Layout";
 import EntryCard from "@/components/EntryCard";
-import AdSlot from "@/components/AdSlot";
 import { getCategory, getEntriesByCategory } from "@/data/content";
 import { Button } from "@/components/ui/button";
+import { usePublishedEntries } from "@/hooks/usePublishedEntries";
 
 export default function CategoryPage() {
   const { slug = "" } = useParams();
+  const { entries: publishedEntries } = usePublishedEntries();
   const category = getCategory(slug);
-  const entries = getEntriesByCategory(slug);
+  const entries = getEntriesByCategory(slug, publishedEntries);
 
   if (!category) {
     return (
       <Layout>
         <div className="container py-24 text-center">
           <h1 className="heading-display text-3xl text-primary mb-4">קטגוריה לא נמצאה</h1>
-          <Link to="/categories"><Button>חזרה לקטגוריות</Button></Link>
+          <Button asChild><Link to="/categories">חזרה לקטגוריות</Link></Button>
         </div>
       </Layout>
     );
   }
 
-  const Icon = (Icons as any)[category.icon] || Icons.Folder;
+  const Icon = (Icons[category.icon as keyof typeof Icons] as LucideIcon | undefined) || Icons.Folder;
 
   return (
     <Layout>
@@ -51,14 +53,9 @@ export default function CategoryPage() {
             עדיין אין ערכים בקטגוריה זו. בקרוב נוסיף תוכן!
           </div>
         ) : (
-          <>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {entries.map(e => <EntryCard key={e.slug} entry={e} />)}
-            </div>
-            <div className="mt-12">
-              <AdSlot variant="inline" />
-            </div>
-          </>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {entries.map(e => <EntryCard key={e.slug} entry={e} />)}
+          </div>
         )}
       </div>
     </Layout>

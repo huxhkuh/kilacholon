@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MessageCircle, Send, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,16 +22,16 @@ export default function TalkSection({ slug }: { slug: string }) {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { load(); }, [slug]);
-
-  async function load() {
+  const load = useCallback(async () => {
     const { data } = await supabase
       .from("entry_talk")
       .select("id, body, author_id, created_at, profiles:author_id(display_name, avatar_url)")
       .eq("entry_slug", slug)
       .order("created_at", { ascending: false });
-    setComments((data as any) ?? []);
-  }
+    setComments((data ?? []) as unknown as Comment[]);
+  }, [slug]);
+
+  useEffect(() => { load(); }, [load]);
 
   async function submit() {
     if (!user) return;
@@ -74,7 +74,7 @@ export default function TalkSection({ slug }: { slug: string }) {
       ) : (
         <div className="rounded-xl bg-secondary/50 border border-border p-5 text-center">
           <p className="text-sm text-muted-foreground mb-3">להשתתפות בדיון נדרשת הרשמה.</p>
-          <Link to="/auth"><Button size="sm">כניסה / הרשמה</Button></Link>
+          <Button asChild size="sm"><Link to="/auth">כניסה / הרשמה</Link></Button>
         </div>
       )}
 

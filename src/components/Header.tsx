@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Search, BookOpen, Menu, X, User, LogOut, Shield, UserCog } from "lucide-react";
+import { Search, BookOpen, Menu, X, User, LogOut, FileCheck2, UserCog, Pencil } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -19,7 +19,7 @@ const nav = [
 
 export default function Header() {
   const [open, setOpen] = useState(false);
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isEditor, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
 
   return (
@@ -30,8 +30,8 @@ export default function Header() {
             <BookOpen className="h-5 w-5 text-primary-foreground" strokeWidth={2.2} />
           </div>
           <div className="flex flex-col leading-none">
-            <span className="font-display text-lg font-bold text-primary tracking-tight">פדיה פיננסית</span>
-            <span className="text-[11px] text-muted-foreground hidden sm:block">שוק ההון בשפה ברורה</span>
+            <span className="font-display text-xl font-bold text-primary tracking-tight">מיכלכלה</span>
+            <span className="text-[11px] text-muted-foreground hidden sm:block">לומדים כלכלה ושוק ההון</span>
           </div>
         </Link>
 
@@ -52,9 +52,14 @@ export default function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Link to="/search" className="hidden sm:flex">
-            <Button variant="ghost" size="icon" aria-label="חיפוש"><Search className="h-4 w-4" /></Button>
-          </Link>
+          <Button asChild variant="ghost" size="icon" className="hidden sm:inline-flex" aria-label="חיפוש">
+            <Link to="/search"><Search className="h-4 w-4" /></Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm" className="hidden lg:inline-flex text-primary">
+            <Link to="/edit?draft=1">
+              <Pencil className="h-4 w-4" /> כתיבת ערך
+            </Link>
+          </Button>
 
           {user ? (
             <DropdownMenu>
@@ -76,6 +81,11 @@ export default function Header() {
                 <DropdownMenuItem onClick={() => navigate("/profile")}>
                   <User className="h-4 w-4" /> הפרופיל שלי
                 </DropdownMenuItem>
+                {isEditor && (
+                  <DropdownMenuItem onClick={() => navigate("/admin/revisions")}>
+                    <FileCheck2 className="h-4 w-4" /> בדיקת עריכות
+                  </DropdownMenuItem>
+                )}
                 {isAdmin && (
                   <DropdownMenuItem onClick={() => navigate("/admin/users")}>
                     <UserCog className="h-4 w-4" /> ניהול משתמשים
@@ -88,11 +98,11 @@ export default function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Link to="/auth" className="hidden md:block">
-              <Button variant="outline" size="sm" className="border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground">
+            <Button asChild variant="outline" size="sm" className="hidden md:inline-flex border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground">
+              <Link to="/auth">
                 כניסה
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           )}
 
           <button
@@ -123,9 +133,14 @@ export default function Header() {
               </NavLink>
             ))}
             {!user && (
-              <Link to="/auth" onClick={() => setOpen(false)} className="mt-2">
-                <Button className="w-full" variant="outline">כניסה / הרשמה</Button>
-              </Link>
+              <>
+                <Button asChild className="w-full mt-2">
+                  <Link to="/edit?draft=1" onClick={() => setOpen(false)}>כתיבת ערך חדש</Link>
+                </Button>
+                <Button asChild className="w-full" variant="outline">
+                  <Link to="/auth" onClick={() => setOpen(false)}>כניסה / הרשמה</Link>
+                </Button>
+              </>
             )}
           </nav>
         </div>

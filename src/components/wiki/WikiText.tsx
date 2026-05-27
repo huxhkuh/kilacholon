@@ -31,11 +31,11 @@ import { entries } from "@/data/content";
  * keep rendering correctly.
  */
 
-type Props = { text: string; className?: string };
+type Props = { text: string; className?: string; knownEntries?: typeof entries };
 
-export default function WikiText({ text, className }: Props) {
+export default function WikiText({ text, className, knownEntries = entries }: Props) {
   const blocks = parseBlocks(text || "");
-  return <div className={className}>{blocks.map((b, i) => renderBlock(b, i))}</div>;
+  return <div className={className}>{blocks.map((b, i) => renderBlock(b, i, knownEntries))}</div>;
 }
 
 // ---------------- Block model ----------------
@@ -195,7 +195,7 @@ function buildList(lines: string[]): ListItem[] {
 }
 
 // ---------------- Block renderers ----------------
-function renderBlock(b: Block, key: React.Key): React.ReactNode {
+function renderBlock(b: Block, key: React.Key, knownEntries: typeof entries): React.ReactNode {
   switch (b.kind) {
     case "hr":
       return <hr key={key} className="my-6 border-border" />;
@@ -206,35 +206,35 @@ function renderBlock(b: Block, key: React.Key): React.ReactNode {
         : lvl === 3
         ? "heading-display text-xl md:text-2xl text-primary mt-6 mb-2"
         : "font-semibold text-lg text-primary mt-5 mb-2";
-      return React.createElement(`h${lvl}`, { key, className: cls }, renderInline(b.text));
+      return React.createElement(`h${lvl}`, { key, className: cls }, renderInline(b.text, knownEntries));
     }
     case "paragraph":
-      return <p key={key} className="my-3 leading-[1.95]">{renderInline(b.text)}</p>;
+      return <p key={key} className="my-3 leading-[1.95]">{renderInline(b.text, knownEntries)}</p>;
     case "pre":
       return <pre key={key} className="my-4 p-3 rounded-md bg-secondary/60 border border-border text-sm overflow-x-auto font-mono whitespace-pre">{b.text}</pre>;
     case "blockquote":
-      return <blockquote key={key} className="my-4 border-r-4 border-gold pr-4 italic text-foreground/85">{renderInline(b.text)}</blockquote>;
+      return <blockquote key={key} className="my-4 border-r-4 border-gold pr-4 italic text-foreground/85">{renderInline(b.text, knownEntries)}</blockquote>;
     case "poem":
-      return <div key={key} className="my-4 whitespace-pre-wrap leading-[1.9]">{renderInline(b.text)}</div>;
+      return <div key={key} className="my-4 whitespace-pre-wrap leading-[1.9]">{renderInline(b.text, knownEntries)}</div>;
     case "indent":
-      return <div key={key} className="my-1" style={{ paddingInlineStart: `${b.level * 1.5}rem` }}>{renderInline(b.text)}</div>;
+      return <div key={key} className="my-1" style={{ paddingInlineStart: `${b.level * 1.5}rem` }}>{renderInline(b.text, knownEntries)}</div>;
     case "dl":
       return (
         <dl key={key} className="my-3">
           {b.items.map((it, i) => it.term
-            ? <React.Fragment key={i}><dt className="font-semibold text-primary mt-2">{renderInline(it.term)}{it.def ? ":" : ""}</dt>{it.def && <dd className="mr-4 text-foreground/85">{renderInline(it.def)}</dd>}</React.Fragment>
-            : <dd key={i} className="mr-4 text-foreground/85">{renderInline(it.def || "")}</dd>
+            ? <React.Fragment key={i}><dt className="font-semibold text-primary mt-2">{renderInline(it.term, knownEntries)}{it.def ? ":" : ""}</dt>{it.def && <dd className="mr-4 text-foreground/85">{renderInline(it.def, knownEntries)}</dd>}</React.Fragment>
+            : <dd key={i} className="mr-4 text-foreground/85">{renderInline(it.def || "", knownEntries)}</dd>
           )}
         </dl>
       );
     case "list":
-      return <RenderList key={key} items={b.items} />;
+      return <RenderList key={key} items={b.items} knownEntries={knownEntries} />;
     case "raw":
       return <div key={key} dangerouslySetInnerHTML={{ __html: b.html }} />;
   }
 }
 
-function RenderList({ items }: { items: ListItem[] }) {
+function RenderList({ items, knownEntries }: { items: ListItem[]; knownEntries: typeof entries }) {
   if (!items.length) return null;
   const isOrdered = items[0].marker.endsWith("#");
   const Tag = (isOrdered ? "ol" : "ul") as "ol" | "ul";
@@ -243,8 +243,8 @@ function RenderList({ items }: { items: ListItem[] }) {
     <Tag className={cls}>
       {items.map((it, i) => (
         <li key={i} className="leading-[1.85]">
-          {renderInline(it.text)}
-          {it.children.length > 0 && <RenderList items={it.children} />}
+          {renderInline(it.text, knownEntries)}
+          {it.children.length > 0 && <RenderList items={it.children} knownEntries={knownEntries} />}
         </li>
       ))}
     </Tag>
@@ -252,7 +252,7 @@ function RenderList({ items }: { items: ListItem[] }) {
 }
 
 // ---------------- Inline parser ----------------
-function renderInline(text: string): React.ReactNode {
+function renderInline(text: string, knownEntries: typeof entries): React.ReactNode {
   if (!text) return null;
 
   // Protect <nowiki>...</nowiki>
@@ -264,7 +264,7 @@ function renderInline(text: string): React.ReactNode {
 
   // Expand templates {{...}} first (they may emit inline text/components)
   const tplTokens: { id: string; node: React.ReactNode }[] = [];
-  text = expandTemplates(text, tplTokens);
+  text = expandTemplates(text, tplTokens, knownEntries);
 
   // Tokenize: split into segments around recognized inline constructs
   type Seg = { type: "text"; v: string } | { type: "node"; v: React.ReactNode };
@@ -290,6 +290,7 @@ function renderInline(text: string): React.ReactNode {
   };
 
   // 1. Template tokens
+  // eslint-disable-next-line no-control-regex -- internal sentinel never comes from rendered HTML
   replace(/\u0002TPL(\d+)\u0002/g, m => tplTokens[+m[1]].node);
 
   // 2. Internal wiki links [[...]]
@@ -301,8 +302,9 @@ function renderInline(text: string): React.ReactNode {
     // External wiki (w:he:..., :he:...)
     if (/^w:|^:?[a-z]{2,3}:/i.test(target)) {
       const cleaned = target.replace(/^w:/i, "").replace(/^:/, "");
-      const [, page] = cleaned.match(/^([a-z]{2,3}):(.+)$/i) || [, "he", cleaned];
-      const lang = (cleaned.match(/^([a-z]{2,3}):/i) || [, "he"])[1];
+      const externalMatch = cleaned.match(/^([a-z]{2,3}):(.+)$/i);
+      const lang = externalMatch?.[1] ?? "he";
+      const page = externalMatch?.[2] ?? cleaned;
       const href = `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.replace(/\s/g, "_"))}`;
       return <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary">{label?.trim() || page}</a>;
     }
@@ -331,7 +333,7 @@ function renderInline(text: string): React.ReactNode {
     if (hashIdx >= 0) { anchor = displaySlug.slice(hashIdx + 1); displaySlug = displaySlug.slice(0, hashIdx); }
 
     const slug = displaySlug.trim().replace(/\s+/g, "-");
-    const entry = entries.find(e => e.slug === slug || e.title === displaySlug.trim());
+    const entry = knownEntries.find(e => e.slug === slug || e.title === displaySlug.trim());
     const exists = !!entry;
     const finalLabel = (label?.trim() || entry?.title || displaySlug) + suffix;
     const to = `/entry/${entry?.slug || slug}${anchor ? `#${anchorize(anchor)}` : ""}`;
@@ -389,13 +391,13 @@ function renderInline(text: string): React.ReactNode {
       const [k, v] = decl.split(":").map(s => s && s.trim());
       if (!k || !v) return;
       const camel = k.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-      // @ts-ignore
-      style[camel] = v;
+      Object.assign(style, { [camel]: v });
     });
     return <span style={style}>{renderInlineSimple(m[2])}</span>;
   });
 
   // 7. Restore <nowiki> escaped sections
+  // eslint-disable-next-line no-control-regex -- internal sentinel never comes from rendered HTML
   replace(/\u0001NW(\d+)\u0001/g, m => <>{nowikis[+m[1]]}</>);
 
   // 8. HTML entities — let the browser handle via dangerouslySetInnerHTML for text-only segs
@@ -442,7 +444,7 @@ function anchorize(s: string) {
 // ---------------- Template expansion ----------------
 // Walk and replace {{NAME|p1|p2|...}} with either pre-rendered React nodes
 // (stored in `tokens`) or with raw text.
-function expandTemplates(src: string, tokens: { id: string; node: React.ReactNode }[]): string {
+function expandTemplates(src: string, tokens: { id: string; node: React.ReactNode }[], knownEntries: typeof entries): string {
   // Iteratively find innermost templates (no nesting in our wiki) until none remain.
   const re = /\{\{([^{}]+)\}\}/g;
   let prev = "";
@@ -454,7 +456,7 @@ function expandTemplates(src: string, tokens: { id: string; node: React.ReactNod
       const parts = body.split("|").map(s => s.trim());
       const name = parts[0];
       const args = parts.slice(1);
-      const node = renderTemplate(name, args);
+      const node = renderTemplate(name, args, knownEntries);
       if (node === undefined) return full; // unknown -> leave as-is
       if (typeof node === "string") return node;
       const id = `\u0002TPL${tokens.length}\u0002`;
@@ -465,7 +467,7 @@ function expandTemplates(src: string, tokens: { id: string; node: React.ReactNod
   return out;
 }
 
-function renderTemplate(name: string, args: string[]): React.ReactNode | string | undefined {
+function renderTemplate(name: string, args: string[], knownEntries: typeof entries): React.ReactNode | string | undefined {
   switch (name) {
     case "ש":
       return "\n";
@@ -484,7 +486,7 @@ function renderTemplate(name: string, args: string[]): React.ReactNode | string 
       return (
         <div className="my-3 px-3 py-2 rounded-md bg-secondary/60 border-r-4 border-primary text-sm">
           <span className="text-xs font-semibold text-primary ml-2">ערך מורחב –</span>
-          <span>{args.map((a, i) => <React.Fragment key={i}>{i > 0 && ", "}{renderInlineLink(a)}</React.Fragment>)}</span>
+          <span>{args.map((a, i) => <React.Fragment key={i}>{i > 0 && ", "}{renderInlineLink(a, knownEntries)}</React.Fragment>)}</span>
         </div>
       );
     case "ציטוט":
@@ -529,9 +531,9 @@ function renderTemplate(name: string, args: string[]): React.ReactNode | string 
   }
 }
 
-function renderInlineLink(target: string): React.ReactNode {
+function renderInlineLink(target: string, knownEntries: typeof entries): React.ReactNode {
   const slug = target.trim().replace(/\s+/g, "-");
-  const entry = entries.find(e => e.slug === slug || e.title === target.trim());
+  const entry = knownEntries.find(e => e.slug === slug || e.title === target.trim());
   return (
     <Link to={`/entry/${entry?.slug || slug}`} className="text-primary underline decoration-primary/30 hover:decoration-primary">
       {entry?.title || target}

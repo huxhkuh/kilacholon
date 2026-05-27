@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Eye, Calendar, Tag as TagIcon, Layers } from "lucide-react";
+import { Calendar, Tag as TagIcon, Layers } from "lucide-react";
 import type { Entry, Category } from "@/data/content";
 
 export default function Infobox({ entry, category }: { entry: Entry; category?: Category }) {
@@ -18,10 +18,6 @@ export default function Infobox({ entry, category }: { entry: Entry; category?: 
         <div className="py-2 flex justify-between gap-2">
           <dt className="text-muted-foreground">רמה</dt>
           <dd className="font-medium text-foreground">{entry.level}</dd>
-        </div>
-        <div className="py-2 flex justify-between gap-2">
-          <dt className="text-muted-foreground flex items-center gap-1.5"><Eye className="h-3.5 w-3.5" />צפיות</dt>
-          <dd className="font-medium text-foreground tabular-nums">{entry.views.toLocaleString("he-IL")}</dd>
         </div>
         <div className="py-2 flex justify-between gap-2">
           <dt className="text-muted-foreground flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />עודכן</dt>

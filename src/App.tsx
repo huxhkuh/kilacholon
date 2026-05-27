@@ -14,6 +14,7 @@ import SearchPage from "./pages/SearchPage.tsx";
 import Auth from "./pages/Auth.tsx";
 import Profile from "./pages/Profile.tsx";
 import AdminUsers from "./pages/AdminUsers.tsx";
+import ReviewRevisions from "./pages/ReviewRevisions.tsx";
 import EditEntry from "./pages/EditEntry.tsx";
 import HelpWikiSyntax from "./pages/HelpWikiSyntax.tsx";
 
@@ -24,7 +25,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <AuthProvider>
           <Routes>
             <Route path="/" element={<Index />} />
@@ -39,6 +40,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/revisions" element={<ReviewRevisions />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

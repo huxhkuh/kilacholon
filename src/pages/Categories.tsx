@@ -1,8 +1,10 @@
 import Layout from "@/components/Layout";
 import CategoryCard from "@/components/CategoryCard";
 import { categories, getEntriesByCategory } from "@/data/content";
+import { usePublishedEntries } from "@/hooks/usePublishedEntries";
 
 export default function Categories() {
+  const { entries } = usePublishedEntries();
   return (
     <Layout>
       <div className="container py-12 md:py-16">
@@ -19,7 +21,7 @@ export default function Categories() {
             <CategoryCard
               key={cat.slug}
               category={cat}
-              count={getEntriesByCategory(cat.slug).length}
+              count={getEntriesByCategory(cat.slug, entries).length}
             />
           ))}
         </div>
