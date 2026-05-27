@@ -50,6 +50,11 @@ export default function Auth() {
   const [magicEmail, setMagicEmail] = useState("");
   const [magicDisplayName, setMagicDisplayName] = useState("");
 
+  function appRedirectUrl(path = "") {
+    const baseUrl = new URL(import.meta.env.BASE_URL, window.location.origin);
+    return new URL(path.replace(/^\//, ""), baseUrl).toString();
+  }
+
   useEffect(() => {
     document.title = "כניסה / הרשמה — מיכלכלה";
     if (!loading && user) navigate(resumeDraft ? "/edit" : "/profile", { replace: true });
@@ -67,7 +72,7 @@ export default function Auth() {
       email: parsed.data.email,
       password: parsed.data.password,
       options: {
-        emailRedirectTo: `${window.location.origin}/`,
+        emailRedirectTo: appRedirectUrl(),
         data: { display_name: parsed.data.displayName },
       },
     });
@@ -108,12 +113,12 @@ export default function Auth() {
     }
 
     setBusy(true);
-    const redirectPath = resumeDraft ? "/auth?draft=1" : "/profile";
+    const redirectPath = resumeDraft ? "auth?draft=1" : "profile";
     const { error } = await supabase.auth.signInWithOtp({
       email: parsed.data.email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: `${window.location.origin}${redirectPath}`,
+        emailRedirectTo: appRedirectUrl(redirectPath),
         data: parsed.data.displayName ? { display_name: parsed.data.displayName } : undefined,
       },
     });
