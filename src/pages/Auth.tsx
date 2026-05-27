@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { z } from "zod";
-import { BookOpen, Mail, ShieldCheck } from "lucide-react";
+import { AlertCircle, BookOpen, CheckCircle2, Mail, ShieldCheck } from "lucide-react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,11 +30,17 @@ const magicLinkSchema = z.object({
   path: ["displayName"],
 });
 
+type AuthNotice = {
+  kind: "success" | "error";
+  text: string;
+};
+
 export default function Auth() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, loading } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<AuthNotice | null>(null);
   const resumeDraft = searchParams.get("draft") === "1";
 
   // signup state
@@ -55,6 +61,39 @@ export default function Auth() {
     return new URL(path.replace(/^\//, ""), baseUrl).toString();
   }
 
+  function explainAuthError(error: { code?: string; message: string }, action: "signup" | "signin" | "email") {
+    const message = error.message.toLowerCase();
+
+    if (error.code === "email_not_confirmed" || message.includes("email not confirmed")) {
+      return "החשבון נוצר, אבל האימייל עדיין לא אושר. פתחו את הודעת האישור או שלחו אותה שוב כאן.";
+    }
+    if (error.code === "invalid_credentials" || message.includes("invalid login credentials")) {
+      return "האימייל או הסיסמה שגויים. אם רק נרשמתם, יש לאשר קודם את האימייל.";
+    }
+    if (error.code === "user_already_exists" || message.includes("already registered") || message.includes("already been registered")) {
+      return "האימייל כבר רשום. עברו לכניסה, או שלחו שוב אישור אם עדיין לא אימתתם אותו.";
+    }
+    if (error.code === "weak_password" || message.includes("password")) {
+      return "הסיסמה נדחתה. השתמשו בלפחות 8 תווים, כולל אות ומספר.";
+    }
+    if (error.code === "over_email_send_rate_limit" || message.includes("rate limit")) {
+      return "נשלחו יותר מדי הודעות בזמן קצר. המתינו מעט ונסו לשלוח שוב.";
+    }
+    if (error.code === "signup_disabled") {
+      return "הרשמה חדשה חסומה כעת בהגדרות האתר.";
+    }
+    if (message.includes("email") && (message.includes("invalid") || message.includes("valid"))) {
+      return "כתובת האימייל נדחתה. הזינו כתובת אמיתית שאליה ניתן לקבל קישור אישור.";
+    }
+    if (action === "email") {
+      return "לא הצלחנו לשלוח הודעת אישור כרגע. נסו שוב בעוד רגע.";
+    }
+    if (action === "signin") {
+      return "הכניסה נכשלה. בדקו את הפרטים ואת אישור האימייל.";
+    }
+    return "ההרשמה לא הושלמה. בדקו את האימייל והסיסמה ונסו שוב.";
+  }
+
   useEffect(() => {
     document.title = "כניסה / הרשמה — מיכלכלה";
     if (!loading && user) navigate(resumeDraft ? "/edit" : "/profile", { replace: true });
@@ -62,13 +101,14 @@ export default function Auth() {
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
+    setNotice(null);
     const parsed = signUpSchema.safeParse({ email, password, displayName });
     if (!parsed.success) {
       toast.error(parsed.error.errors[0].message);
       return;
     }
     setBusy(true);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: parsed.data.email,
       password: parsed.data.password,
       options: {
@@ -78,14 +118,25 @@ export default function Auth() {
     });
     setBusy(false);
     if (error) {
-      toast.error(error.message.includes("registered") ? "כתובת זו כבר רשומה" : error.message);
+      const text = explainAuthError(error, "signup");
+      setNotice({ kind: "error", text });
+      toast.error(text);
+    } else if (data.session) {
+      const text = "נרשמתם והתחברתם בהצלחה.";
+      setNotice({ kind: "success", text });
+      toast.success(text);
     } else {
-      toast.success("נרשמת בהצלחה! אם נדרש אישור, בדקו את האימייל. אפשר להתחיל לכתוב גם עכשיו כטיוטה.");
+      const text = "ההרשמה התקבלה. שלחנו מייל אישור; רק לאחר לחיצה על הקישור תוכלו להתחבר ולשלוח עריכות.";
+      setSigninEmail(parsed.data.email);
+      setMagicEmail(parsed.data.email);
+      setNotice({ kind: "success", text });
+      toast.success(text);
     }
   }
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
+    setNotice(null);
     const parsed = signInSchema.safeParse({ email: signinEmail, password: signinPassword });
     if (!parsed.success) {
       toast.error(parsed.error.errors[0].message);
@@ -98,14 +149,47 @@ export default function Auth() {
     });
     setBusy(false);
     if (error) {
-      toast.error(error.message.includes("Invalid") ? "אימייל או סיסמה שגויים" : error.message);
+      const text = explainAuthError(error, "signin");
+      setNotice({ kind: "error", text });
+      toast.error(text);
     } else {
+      setNotice({ kind: "success", text: "התחברתם בהצלחה." });
       toast.success("התחברת בהצלחה");
     }
   }
 
+  async function resendConfirmation() {
+    const confirmationEmail = signinEmail || email;
+    const parsed = z.string().trim().email("נא להזין אימייל תקין קודם").safeParse(confirmationEmail);
+    if (!parsed.success) {
+      toast.error(parsed.error.errors[0].message);
+      return;
+    }
+
+    setBusy(true);
+    setNotice(null);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: parsed.data,
+      options: { emailRedirectTo: appRedirectUrl("profile") },
+    });
+    setBusy(false);
+
+    if (error) {
+      const text = explainAuthError(error, "email");
+      setNotice({ kind: "error", text });
+      toast.error(text);
+      return;
+    }
+
+    const text = "מייל אישור חדש נשלח. בדקו גם את תיקיית הספאם ולחצו על הקישור לפני כניסה עם סיסמה.";
+    setNotice({ kind: "success", text });
+    toast.success(text);
+  }
+
   async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
+    setNotice(null);
     const parsed = magicLinkSchema.safeParse({ email: magicEmail, displayName: magicDisplayName });
     if (!parsed.success) {
       toast.error(parsed.error.errors[0].message);
@@ -125,11 +209,15 @@ export default function Auth() {
     setBusy(false);
 
     if (error) {
-      toast.error("שליחת קישור הכניסה נכשלה. בדקו את כתובת האימייל ונסו שוב.");
+      const text = explainAuthError(error, "email");
+      setNotice({ kind: "error", text });
+      toast.error(text);
       return;
     }
 
-    toast.success("שלחנו קישור כניסה מאובטח לאימייל. לחצו עליו כדי להתחיל לתרום.");
+    const text = "שלחנו קישור כניסה מאובטח לאימייל. לחצו עליו כדי להתחיל לתרום.";
+    setNotice({ kind: "success", text });
+    toast.success(text);
   }
 
   return (
@@ -142,6 +230,22 @@ export default function Auth() {
           <h1 className="heading-display text-3xl text-primary mb-2">ברוכים הבאים</h1>
           <p className="text-muted-foreground">הצטרפו לקהילת הכותבים והקוראים</p>
         </div>
+
+        {notice && (
+          <div
+            role="alert"
+            className={`mb-5 flex gap-3 rounded-xl border p-4 text-sm leading-relaxed ${
+              notice.kind === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                : "border-destructive/25 bg-destructive/5 text-foreground"
+            }`}
+          >
+            {notice.kind === "success"
+              ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-700" />
+              : <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />}
+            <p>{notice.text}</p>
+          </div>
+        )}
 
         <div className="rounded-2xl border border-border bg-card shadow-card p-6 md:p-8">
           <Tabs defaultValue="magic" className="w-full">
@@ -184,6 +288,12 @@ export default function Auth() {
                 <Button type="submit" className="w-full" disabled={busy}>
                   {busy ? "מתחבר..." : "כניסה"}
                 </Button>
+                <Button type="button" variant="ghost" className="w-full" onClick={resendConfirmation} disabled={busy}>
+                  שליחה מחדש של אישור אימייל
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  נרשמתם עכשיו? יש ללחוץ על הקישור באימייל לפני כניסה עם סיסמה.
+                </p>
               </form>
             </TabsContent>
 
