@@ -119,6 +119,14 @@ export default function EditEntry() {
   // Detect if the entry being edited is a stub (קצרמר) — fetch latest revision
   useEffect(() => {
     if (isNew || !slug) return;
+    const staticLooksLikeStub = existing
+      ? existing.tags.includes("קצרמר") || /קצרמר/.test(existing.shortDescription) || /קצרמר/.test(existing.fullDescription)
+      : false;
+    if (staticLooksLikeStub) {
+      setIsStubEntry(true);
+      setExpandMode(true);
+    }
+
     let cancelled = false;
     (async () => {
       const { data } = await supabase
@@ -138,7 +146,7 @@ export default function EditEntry() {
       }
     })();
     return () => { cancelled = true; };
-  }, [isNew, slug]);
+  }, [existing, isNew, slug]);
 
   // ---------- Editor toolbar helpers ----------
   function wrapSelection(before: string, after = before) {
