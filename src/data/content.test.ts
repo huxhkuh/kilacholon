@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeApprovedRevisions, type Entry, type ApprovedRevision } from "./content";
+import { categories, entries, mergeApprovedRevisions, type Entry, type ApprovedRevision } from "./content";
 
 const seed: Entry = {
   slug: "seed",
@@ -58,5 +58,36 @@ describe("mergeApprovedRevisions", () => {
       views: 0,
       pros: [],
     });
+  });
+});
+
+describe("seed content catalog", () => {
+  it("keeps categories, related entries, and wiki links internally consistent", () => {
+    const categorySlugs = new Set(categories.map(category => category.slug));
+    const entrySlugs = new Set(entries.map(entry => entry.slug));
+
+    expect(entrySlugs.size).toBe(entries.length);
+    expect(entries.length).toBeGreaterThanOrEqual(70);
+
+    const missingCategories = entries
+      .filter(entry => !categorySlugs.has(entry.category))
+      .map(entry => `${entry.slug}:${entry.category}`);
+    expect(missingCategories).toEqual([]);
+
+    const missingRelated = entries.flatMap(entry =>
+      entry.related
+        .filter(slug => !entrySlugs.has(slug))
+        .map(slug => `${entry.slug}->${slug}`),
+    );
+    expect(missingRelated).toEqual([]);
+
+    const missingWikiLinks = entries.flatMap(entry => {
+      const links = [...entry.fullDescription.matchAll(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g)]
+        .map(match => match[1]);
+      return links
+        .filter(slug => !entrySlugs.has(slug))
+        .map(slug => `${entry.slug}->${slug}`);
+    });
+    expect(missingWikiLinks).toEqual([]);
   });
 });
