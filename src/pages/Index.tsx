@@ -1,234 +1,99 @@
-import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { ArrowLeft, BookOpen, Search, Layers, GitCompare, Sparkles, TrendingUp, Clock, Shuffle, Pencil, Users } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { ArrowLeft, BookOpen, GraduationCap, Search, Shuffle, Users } from "lucide-react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import CategoryCard from "@/components/CategoryCard";
 import EntryCard from "@/components/EntryCard";
-import { categories, featuredEntries, recentEntries, getEntriesByCategory } from "@/data/content";
+import CategoryIcon from "@/components/CategoryIcon";
+import { categories, featuredEntries, recentEntries } from "@/data/content";
 import { usePublishedEntries } from "@/hooks/usePublishedEntries";
-import { useReadEntries } from "@/hooks/useReadEntries";
+import { isStubEntry } from "@/lib/entry-search";
 
-const browsingGates = [
-  { slug: "keren-herum", title: "חיסכון משפחתי", text: "נזילות, חירום ופיקדונות." },
-  { slug: "ribit-bank-israel", title: "המשק הרחב", text: "ריבית, אינפלציה ותוצר." },
-  { slug: "machpil-revach", title: "ניתוח מניות", text: "דיבידנד ותמחור חברות." },
-  { slug: "tshua-lapidyon", title: "אג\"ח מתקדם", text: "תשואה לפדיון ומח\"מ." },
-];
-
-const Index = () => {
+export default function Index() {
   const { entries } = usePublishedEntries();
-  const { readCount } = useReadEntries();
-  const [randomPosition, setRandomPosition] = useState(() => Math.floor(Math.random() * 1000000));
-  const featured = featuredEntries(entries);
-  const recent = recentEntries(entries);
-  const randomEntry = entries.length ? entries[randomPosition % entries.length] : undefined;
+  const [query, setQuery] = useState("");
+  const navigate = useNavigate();
+  const complete = useMemo(() => entries.filter(entry => !isStubEntry(entry)), [entries]);
+  const spotlight = complete.find(entry => entry.slug === "ribit-deribit") ?? complete.find(entry => entry.title.includes("דריבית")) ?? complete[0];
+  const featured = featuredEntries(complete).slice(0, 6);
+  const recent = recentEntries(complete).filter(entry => !featured.some(item => item.slug === entry.slug)).slice(0, 3);
+  const stubCount = entries.length - complete.length;
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    entries.forEach(entry => counts.set(entry.category, (counts.get(entry.category) ?? 0) + 1));
+    return counts;
+  }, [entries]);
 
-  useEffect(() => {
-    document.title = "מיכלכלה — לומדים כלכלה ושוק ההון בשפה ברורה";
-    document.querySelector('meta[name="description"]')?.setAttribute("content", "מיכלכלה: אנציקלופדיה שיתופית לכלכלה, שוק ההון, חיסכון ופנסיה.");
-    document.querySelector('meta[property="og:title"]')?.setAttribute("content", "מיכלכלה — לומדים כלכלה ושוק ההון");
-    document.querySelector('meta[property="og:description"]')?.setAttribute("content", "אנציקלופדיה שיתופית למושגים בכלכלה, חיסכון והשקעות בשפה ברורה.");
-    document.querySelector('link[rel="canonical"]')?.setAttribute("href", window.location.origin);
-  }, []);
+  const homepageCategoryOrder = ["beginners", "household", "microeconomics", "economy", "stocks", "banking", "business", "research", "labor-environment", "pension", "insurance", "people"];
+  const homepageCategories = homepageCategoryOrder
+    .map(slug => categories.find(category => category.slug === slug))
+    .filter((category): category is typeof categories[number] => !!category && !!categoryCounts.get(category.slug));
 
   return (
     <Layout>
-      {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-hero text-primary-foreground">
-        {/* קישוט */}
-        <div className="absolute inset-0 opacity-[0.07]" style={{
-          backgroundImage: 'radial-gradient(circle at 20% 20%, white 1px, transparent 1px), radial-gradient(circle at 80% 60%, white 1px, transparent 1px)',
-          backgroundSize: '60px 60px, 90px 90px',
-        }} />
-        <div className="absolute -bottom-40 -left-20 w-96 h-96 rounded-full bg-gold/10 blur-3xl" />
-        <div className="absolute -top-20 -right-20 w-96 h-96 rounded-full bg-gold/10 blur-3xl" />
-
-        <div className="container relative py-20 md:py-28">
-          <div className="max-w-3xl mx-auto text-center animate-fade-up">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gold/15 border border-gold/30 text-gold-soft text-sm mb-6">
-              <Sparkles className="h-3.5 w-3.5" />
-              <Users className="h-3.5 w-3.5" />
-              <span>מיכלכלה · אנציקלופדיה שיתופית לכלכלה</span>
-            </div>
-            <h1 className="heading-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl text-balance mb-6">
-              מילון כלכלה שכותבים
-              <span className="block mt-2 text-gold-soft">יחד</span>
-            </h1>
-            <p className="text-lg md:text-xl text-primary-foreground/85 leading-relaxed text-balance max-w-2xl mx-auto mb-10">
-              אנציקלופדיה פתוחה למושגים בכלכלה, השקעות, פנסיה וחיסכון. קוראים ערכים, מתקנים, מוסיפים מקורות וכותבים ערכים חדשים.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Button asChild size="lg" className="bg-gold text-gold-foreground hover:bg-gold-soft shadow-gold h-12 px-7 text-base font-semibold">
-                <Link to="/dictionary">
-                  לפתיחת המילון
-                  <ArrowLeft className="h-4 w-4 mr-1" />
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="bg-transparent border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 h-12 px-7 text-base">
-                <Link to="/edit?draft=1">
-                  <Pencil className="h-4 w-4 ml-1" />
-                  כתיבת ערך
-                </Link>
-              </Button>
-            </div>
-
-            <div className="mt-12 flex flex-wrap justify-center gap-x-8 gap-y-3 text-sm text-primary-foreground/70">
-              <Link to="/categories" className="flex items-center gap-1.5 hover:text-gold-soft transition-colors">
-                <Layers className="h-4 w-4" /> כל הקטגוריות
-              </Link>
-              <Link to="/search" className="flex items-center gap-1.5 hover:text-gold-soft transition-colors">
-                <Search className="h-4 w-4" /> חיפוש מתקדם
-              </Link>
-              <Link to="/help/wiki-syntax" className="flex items-center gap-1.5 hover:text-gold-soft transition-colors">
-                <GitCompare className="h-4 w-4" /> מדריך לכותבים
-              </Link>
-            </div>
+      <section className="container home-hero">
+        <div>
+          <h1 className="hero-title">עניינים של כסף.<br /><span>מילים שעושות סדר.</span></h1>
+          <p className="hero-lead">להבין כלכלה, מושג אחד בכל פעם.</p>
+          <p className="hero-description">אנציקלופדיה שיתופית לכלכלה, חיסכון ושוק ההון.<br className="hidden sm:block" /> הסברים ברורים, דוגמאות ומקורות — במקום אחד.</p>
+          <form role="search" className="hero-search" onSubmit={event => { event.preventDefault(); navigate(`/search${query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ""}`); }}>
+            <Search className="size-5 shrink-0" aria-hidden="true" />
+            <label htmlFor="home-search" className="sr-only">חיפוש באנציקלופדיה</label>
+            <input id="home-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="חפשו מושג, שאלה או נושא..." />
+            <Button type="submit">חיפוש</Button>
+          </form>
+          <div className="hero-suggestions" aria-label="מושגים להתחלה">
+            {["אינפלציה", "ריבית דריבית", "קרן סל"].map(term => <Link key={term} to={`/search?q=${encodeURIComponent(term)}`}>{term}</Link>)}
           </div>
+        </div>
+        {spotlight && <aside className="hero-spotlight">
+          <BookOpen className="size-10 text-primary" strokeWidth={1.4} aria-hidden="true" />
+          <p className="spotlight-label">ערך להתחיל איתו</p>
+          <h2 className="font-display text-4xl font-bold text-primary">{spotlight.title}</h2>
+          <p className="text-muted-foreground text-lg leading-relaxed">{spotlight.shortDescription}</p>
+          <Link to={`/entry/${spotlight.slug}`} className="text-link mt-auto">לקריאת הערך <ArrowLeft className="size-4" /></Link>
+        </aside>}
+      </section>
+
+      <div className="container">
+        <div className="knowledge-strip">
+          <div><BookOpen /><p><strong>אנציקלופדיה פתוחה</strong><span>{entries.length.toLocaleString("he-IL")} ערכים ב־{categories.length} תחומי ידע</span></p></div>
+          <div><GraduationCap /><p><strong>לומדים בקצב שלכם</strong><span>הסברים, דוגמאות וקישורים להעמקה</span></p></div>
+          <div><Users /><p><strong>נכתבת יחד</strong><span>אפשר להציע תיקונים ולהוסיף מקורות</span></p></div>
+        </div>
+      </div>
+
+      <section className="container section-space">
+        <div className="section-heading"><div><h2>מאיפה מתחילים?</h2><p>בחרו את התחום שמעניין אתכם.</p></div><Link to="/categories" className="text-link">כל תחומי הידע <ArrowLeft className="size-4" /></Link></div>
+        <div className="category-index">
+          {homepageCategories.map(category => <Link key={category.slug} to={`/category/${category.slug}`} className="category-index-item">
+            <CategoryIcon name={category.icon} className="size-7" />
+            <div><h3>{category.name}</h3><span>{categoryCounts.get(category.slug) ?? 0} ערכים</span></div>
+            <ArrowLeft className="size-4 mr-auto" aria-hidden="true" />
+          </Link>)}
         </div>
       </section>
 
-      <section className="container pt-12 md:pt-16">
-        <div className="rounded-2xl border border-border bg-card shadow-card p-6 md:p-8">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 mb-6">
-            <div>
-              <div className="text-sm font-semibold text-gold-deep mb-2">שערים במילון</div>
-              <h2 className="heading-display text-2xl md:text-3xl text-primary">בחרו נושא והמשיכו דרך הקישורים</h2>
-            </div>
-            <Link to="/dictionary" className="text-sm text-primary hover:text-primary-soft flex items-center gap-1">
-              לכל הערכים <ArrowLeft className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {browsingGates.map(item => (
-              <Link key={item.slug} to={`/entry/${item.slug}`} className="rounded-xl border border-border/70 p-4 hover:border-gold/40 hover:bg-secondary/35 transition-colors">
-                <h3 className="font-display font-semibold text-foreground mb-1">{item.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{item.text}</p>
-              </Link>
-            ))}
-          </div>
+      <section className="feature-band section-space">
+        <div className="container">
+          <div className="section-heading"><div><h2>מושגים שכדאי להכיר</h2><p>נקודות פתיחה טובות להבנת התמונה הרחבה.</p></div><Link to="/dictionary" className="text-link">למילון המושגים <ArrowLeft className="size-4" /></Link></div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{featured.map(entry => <EntryCard key={entry.slug} entry={entry} />)}</div>
         </div>
       </section>
 
-      {randomEntry && (
-        <section className="container pt-10">
-          <div className="rounded-2xl border border-gold/30 bg-accent/25 p-6 md:p-8 flex flex-col md:flex-row md:items-center gap-6">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 text-gold-deep text-sm font-semibold mb-2">
-                <Shuffle className="h-4 w-4" /> ערך אקראי
-              </div>
-              <h2 className="heading-display text-2xl text-primary mb-2">{randomEntry.title}</h2>
-              <p className="text-muted-foreground leading-relaxed">{randomEntry.shortDescription}</p>
-            </div>
-            <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0">
-              <Button asChild>
-                <Link to={`/entry/${randomEntry.slug}`}>לקריאת הערך</Link>
-              </Button>
-              <Button variant="outline" onClick={() => setRandomPosition(Math.floor(Math.random() * 1000000))}>
-                <Shuffle className="h-4 w-4" /> ערך אחר
-              </Button>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* קטגוריות ראשיות */}
-      <section className="container py-16 md:py-20">
-        <div className="text-center mb-12">
-          <span className="gold-divider mb-4" />
-          <h2 className="heading-display text-3xl md:text-4xl text-foreground mb-3">קטגוריות ראשיות</h2>
-          <p className="text-muted-foreground max-w-xl mx-auto">בחרו תחום שמעניין אתכם — כל קטגוריה מכילה ערכים מסודרים לפי רמת הקושי.</p>
+      <section className="container section-space">
+        <div className="section-heading"><div><h2>עוד משהו לגלות</h2><p>ערכים נוספים שפותחים כיווני מחשבה חדשים.</p></div>
+          <Button variant="outline" disabled={!complete.length} onClick={() => { const entry = complete[Math.floor(Math.random() * complete.length)]; if (entry) navigate(`/entry/${entry.slug}`); }}><Shuffle />ערך בהפתעה</Button>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {categories.map(cat => (
-            <CategoryCard
-              key={cat.slug}
-              category={cat}
-              count={getEntriesByCategory(cat.slug, entries).length}
-            />
-          ))}
-        </div>
+        <div className="grid gap-4 md:grid-cols-3">{recent.map(entry => <EntryCard key={entry.slug} entry={entry} />)}</div>
       </section>
 
-      {/* תוכן מרכזי + צד */}
-      <section className="container py-12 md:py-16 bg-secondary/30 -mx-4 px-4 md:mx-0 md:px-0 md:bg-transparent">
-        <div className="md:bg-secondary/30 md:rounded-2xl md:p-8 lg:p-12">
-          <div className="grid lg:grid-cols-[1fr_300px] gap-10">
-            {/* תוכן */}
-            <div>
-              <div className="flex items-end justify-between mb-8">
-                <div>
-                  <div className="flex items-center gap-2 text-gold-deep mb-2">
-                    <TrendingUp className="h-4 w-4" />
-                    <span className="text-sm font-semibold uppercase tracking-wider">ערכים נבחרים</span>
-                  </div>
-                  <h2 className="heading-display text-2xl md:text-3xl text-foreground">מושגים שכדאי להכיר</h2>
-                </div>
-                <Link to="/search" className="text-sm text-primary hover:text-primary-soft hidden sm:flex items-center gap-1">
-                  לכל הערכים <ArrowLeft className="h-3.5 w-3.5" />
-                </Link>
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-4">
-                {featured.map(e => <EntryCard key={e.slug} entry={e} />)}
-              </div>
-            </div>
-
-            {/* sidebar */}
-            <aside className="hidden lg:block space-y-6">
-              <div className="rounded-xl bg-card border border-border/70 p-5 shadow-card">
-                <h4 className="font-display font-semibold text-primary mb-3">סטטיסטיקות</h4>
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">סה"כ ערכים</span><span className="font-semibold">{entries.length}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">קטגוריות</span><span className="font-semibold">{categories.length}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">נקראו אצלכם</span><span className="font-semibold">{readCount}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">ייעוד</span><span className="font-semibold">ידע שיתופי</span></div>
-                </div>
-              </div>
-            </aside>
-          </div>
-        </div>
-      </section>
-
-      {/* ערכים חדשים */}
-      <section className="container py-12 md:py-16">
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <div className="flex items-center gap-2 text-gold-deep mb-2">
-              <Clock className="h-4 w-4" />
-              <span className="text-sm font-semibold uppercase tracking-wider">נוסף לאחרונה</span>
-            </div>
-            <h2 className="heading-display text-2xl md:text-3xl text-foreground">ערכים חדשים</h2>
-          </div>
-        </div>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {recent.slice(0, 6).map(e => <EntryCard key={e.slug} entry={e} />)}
-        </div>
-      </section>
-
-      {/* CTA קהילה */}
-      <section className="container py-16">
-        <div className="rounded-2xl bg-gradient-hero text-primary-foreground p-10 md:p-14 text-center relative overflow-hidden">
-          <div className="absolute -top-10 -left-10 w-64 h-64 rounded-full bg-gold/10 blur-3xl" />
-          <div className="relative">
-            <span className="gold-divider mb-5" />
-            <h2 className="heading-display text-3xl md:text-4xl mb-4">זו אנציקלופדיה שיתופית</h2>
-            <p className="text-primary-foreground/85 max-w-xl mx-auto mb-7">
-              כל אחד יכול להציע ערך חדש, להוסיף מקור, ליצור קישור בין מושגים או לשפר ניסוח. עריכות נבדקות לפני שהן מתפרסמות לציבור.
-            </p>
-            <Button asChild size="lg" className="bg-gold text-gold-foreground hover:bg-gold-soft shadow-gold h-12 px-8 font-semibold">
-              <Link to="/edit?draft=1">
-                כתיבת ערך חדש
-              </Link>
-            </Button>
-          </div>
+      <section className="container pb-16">
+        <div className="contribute-panel">
+          <div><h2 className="font-display text-3xl md:text-4xl font-bold">הידע הזה גדל בזכות כולנו.</h2><p className="mt-3 max-w-2xl text-lg leading-relaxed">נתקלתם בניסוח שאפשר לדייק? חסר מקור טוב? הציעו שיפור לערך קיים או כתבו ערך חדש. העריכות נבדקות לפני הפרסום.</p></div>
+          <div className="flex flex-col gap-3 shrink-0"><Button asChild size="lg"><Link to="/edit?draft=1">כתיבת ערך חדש <ArrowLeft /></Link></Button><Link to="/search?type=stub" className="text-link justify-center">{stubCount} קצרמרים מחכים להרחבה</Link></div>
         </div>
       </section>
     </Layout>
   );
-};
-
-export default Index;
+}

@@ -1,0 +1,29 @@
+name: Check proposed changes
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:database
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run build
+        env:
+          VITE_BASE_PATH: /kilacholon/

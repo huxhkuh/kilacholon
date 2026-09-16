@@ -1,63 +1,41 @@
+import { useDeferredValue, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import * as Icons from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { ArrowRight, Search } from "lucide-react";
 import Layout from "@/components/Layout";
 import EntryCard from "@/components/EntryCard";
+import EntryFilter from "@/components/EntryFilters";
+import CategoryIcon from "@/components/CategoryIcon";
 import { getCategory, getEntriesByCategory } from "@/data/content";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { usePublishedEntries } from "@/hooks/usePublishedEntries";
+import { isStubEntry, searchEntries } from "@/lib/entry-search";
 
-export default function CategoryPage() {
-  const { slug = "" } = useParams();
+function CategoryContents({ slug }: { slug: string }) {
   const { entries: publishedEntries } = usePublishedEntries();
   const category = getCategory(slug);
-  const entries = getEntriesByCategory(slug, publishedEntries);
-
-  if (!category) {
-    return (
-      <Layout>
-        <div className="container py-24 text-center">
-          <h1 className="heading-display text-3xl text-primary mb-4">קטגוריה לא נמצאה</h1>
-          <Button asChild><Link to="/categories">חזרה לקטגוריות</Link></Button>
-        </div>
-      </Layout>
-    );
-  }
-
-  const Icon = (Icons[category.icon as keyof typeof Icons] as LucideIcon | undefined) || Icons.Folder;
-
-  return (
-    <Layout>
-      {/* Hero קטגוריה */}
-      <section className={`bg-gradient-to-br ${category.color} text-white`}>
-        <div className="container py-14 md:py-20">
-          <Link to="/categories" className="inline-flex items-center gap-1 text-white/80 hover:text-white text-sm mb-5">
-            <Icons.ArrowRight className="h-4 w-4" /> כל הקטגוריות
-          </Link>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="h-14 w-14 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center">
-              <Icon className="h-7 w-7" strokeWidth={1.8} />
-            </div>
-            <div>
-              <h1 className="heading-display text-3xl md:text-5xl">{category.name}</h1>
-              <p className="text-white/85 mt-1">{entries.length} ערכים בקטגוריה</p>
-            </div>
-          </div>
-          <p className="text-white/90 max-w-2xl text-lg leading-relaxed mt-2">{category.description}</p>
-        </div>
-      </section>
-
-      <div className="container py-12">
-        {entries.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground">
-            עדיין אין ערכים בקטגוריה זו. בקרוב נוסיף תוכן!
-          </div>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {entries.map(e => <EntryCard key={e.slug} entry={e} />)}
-          </div>
-        )}
-      </div>
-    </Layout>
-  );
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const [level, setLevel] = useState("");
+  const [type, setType] = useState("");
+  const [visible, setVisible] = useState(24);
+  const entries = useMemo(() => getEntriesByCategory(slug, publishedEntries), [slug, publishedEntries]);
+  const results = useMemo(() => searchEntries(entries.filter(entry => (!level || level === entry.level) && (type !== "stub" || isStubEntry(entry)) && (type !== "full" || !isStubEntry(entry))), deferredQuery), [entries, level, type, deferredQuery]);
+  if (!category) return <Layout><div className="container page-space"><div className="page-heading"><h1>הקטגוריה לא נמצאה</h1><p>אפשר להמשיך דרך רשימת תחומי הידע.</p></div><Button asChild><Link to="/categories">לכל הקטגוריות</Link></Button></div></Layout>;
+  return <Layout><div className="container page-space">
+    <Link to="/categories" className="text-link mb-7"><ArrowRight className="size-4" /> כל תחומי הידע</Link>
+    <div className="page-heading category-page-heading"><CategoryIcon name={category.icon} className="size-10 text-primary" /><div><h1>{category.name}</h1><p>{category.description}. {entries.length} ערכים להרחבת הידע.</p></div></div>
+    <div className="category-filters">
+      <div className="search-field"><Search aria-hidden="true" /><label htmlFor="category-search" className="sr-only">חיפוש בקטגוריה</label><Input id="category-search" type="search" placeholder="חיפוש בתוך הקטגוריה..." value={query} onChange={event => { setQuery(event.target.value); setVisible(24); }} /></div>
+      <EntryFilter label="רמת היכרות" value={level} onChange={value => { setLevel(value); setVisible(24); }} options={[{ value: "all", label: "כל הרמות" }, ...["מתחילים", "בינוני", "מתקדם"].map(value => ({ value, label: value }))]} />
+      <EntryFilter label="סוג ערך" value={type} onChange={value => { setType(value); setVisible(24); }} options={[{ value: "all", label: "כל הערכים" }, { value: "full", label: "ערכים מלאים" }, { value: "stub", label: "קצרמרים" }]} />
+    </div>
+    <div className="results-summary"><p role="status">{results.length} ערכים נמצאו</p><Link to={`/search?category=${slug}`} className="text-link">חיפוש מתקדם</Link></div>
+    {results.length ? <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{results.slice(0, visible).map(entry => <EntryCard key={entry.slug} entry={entry} />)}</div> : <div className="empty-state"><h2>לא נמצאו ערכים בסינון הזה</h2><p>נסו חיפוש אחר או הסירו את הסינונים.</p><Button variant="outline" onClick={() => { setQuery(""); setLevel(""); setType(""); }}>איפוס החיפוש</Button></div>}
+    {results.length > visible && <div className="load-more"><p>מוצגים {visible} מתוך {results.length}</p><Button variant="outline" size="lg" onClick={() => setVisible(count => count + 24)}>טענו ערכים נוספים</Button></div>}
+  </div></Layout>;
+}
+export default function CategoryPage() {
+  const { slug = "" } = useParams();
+  return <CategoryContents key={slug} slug={slug} />;
 }

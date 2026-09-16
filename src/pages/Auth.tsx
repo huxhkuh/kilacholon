@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { safeReturnPath } from "@/lib/edit-drafts";
 
 const signUpSchema = z.object({
   email: z.string().trim().email("כתובת אימייל לא תקינה").max(255),
@@ -42,6 +43,8 @@ export default function Auth() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<AuthNotice | null>(null);
   const resumeDraft = searchParams.get("draft") === "1";
+  const returnPath = safeReturnPath(searchParams.get("returnTo"), resumeDraft ? "/edit" : "/profile");
+  const returnAuthPath = `auth?returnTo=${encodeURIComponent(returnPath)}`;
 
   // signup state
   const [email, setEmail] = useState("");
@@ -96,8 +99,8 @@ export default function Auth() {
 
   useEffect(() => {
     document.title = "כניסה / הרשמה — מיכלכלה";
-    if (!loading && user) navigate(resumeDraft ? "/edit" : "/profile", { replace: true });
-  }, [user, loading, navigate, resumeDraft]);
+    if (!loading && user) navigate(returnPath, { replace: true });
+  }, [user, loading, navigate, returnPath]);
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
@@ -112,7 +115,7 @@ export default function Auth() {
       email: parsed.data.email,
       password: parsed.data.password,
       options: {
-        emailRedirectTo: appRedirectUrl(),
+        emailRedirectTo: appRedirectUrl(returnAuthPath),
         data: { display_name: parsed.data.displayName },
       },
     });
@@ -171,7 +174,7 @@ export default function Auth() {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email: parsed.data,
-      options: { emailRedirectTo: appRedirectUrl("profile") },
+      options: { emailRedirectTo: appRedirectUrl(returnAuthPath) },
     });
     setBusy(false);
 
@@ -197,7 +200,7 @@ export default function Auth() {
     }
 
     setBusy(true);
-    const redirectPath = resumeDraft ? "auth?draft=1" : "profile";
+    const redirectPath = returnAuthPath;
     const { error } = await supabase.auth.signInWithOtp({
       email: parsed.data.email,
       options: {

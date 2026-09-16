@@ -4,7 +4,7 @@ import type { Entry, Category } from "@/data/content";
 
 export default function Infobox({ entry, category }: { entry: Entry; category?: Category }) {
   return (
-    <aside className="rounded-xl border-2 border-primary/15 bg-gradient-to-b from-secondary/40 to-card overflow-hidden shadow-card sticky top-24">
+    <aside className="rounded-xl border-2 border-primary/15 bg-gradient-to-b from-secondary/40 to-card overflow-hidden shadow-card">
       <div className="bg-primary text-primary-foreground px-4 py-2.5">
         <h3 className="font-display font-bold text-base text-center">{entry.title}</h3>
       </div>
@@ -27,7 +27,7 @@ export default function Infobox({ entry, category }: { entry: Entry; category?: 
           <dt className="text-muted-foreground flex items-center gap-1.5 mb-2"><TagIcon className="h-3.5 w-3.5" />תגיות</dt>
           <dd className="flex flex-wrap gap-1">
             {entry.tags.map(t => (
-              <span key={t} className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary">{t}</span>
+              <Link key={t} to={`/search?q=${encodeURIComponent(t)}`} className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary hover:underline">{t}</Link>
             ))}
           </dd>
         </div>

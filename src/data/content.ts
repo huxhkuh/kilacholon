@@ -1,3 +1,6 @@
+import { seedEnhancements } from './seed-enhancements.ts';
+import { stubEnhancements } from './stub-enhancements.ts';
+
 // תוכן בסיסי לאתר — ערכי פתיחה + קטגוריות
 // כל הטקסטים בעברית פשוטה ומכובדת
 
@@ -25,6 +28,9 @@ export type Entry = {
   related: string[]; // slugs
   views: number;
   updatedAt: string;
+  sources?: { title: string; url: string }[];
+  contentStatus?: 'article' | 'stub';
+  aliases?: string[];
 };
 
 export type ApprovedRevision = {
@@ -43,13 +49,20 @@ export const categories: Category[] = [
   { slug: 'stocks', name: 'מניות', description: 'הבעלות בחברות ציבוריות', icon: 'TrendingUp', color: 'from-rose-800 to-rose-950' },
   { slug: 'indices', name: 'מדדים', description: 'מדידת ביצועי השוק', icon: 'BarChart3', color: 'from-amber-700 to-amber-900' },
   { slug: 'bonds', name: 'אג"ח וריבית', description: 'חוב, תשואות וסיכון ריבית', icon: 'ScrollText', color: 'from-orange-800 to-amber-950' },
-  { slug: 'etf', name: 'קרנות סל', description: 'השקעה מפוזרת בקלות', icon: 'Layers', color: 'from-indigo-800 to-indigo-950' },
+  { slug: 'etf', name: 'קרנות סל', description: 'קרנות נסחרות, חשיפות ושיטות עקיבה', icon: 'Layers', color: 'from-indigo-800 to-indigo-950' },
   { slug: 'pension', name: 'פנסיה', description: 'חיסכון לטווח ארוך לעת זקנה', icon: 'Shield', color: 'from-sky-800 to-sky-950' },
   { slug: 'gemel', name: 'קופות גמל', description: 'מכשירי חיסכון מסורתיים', icon: 'Wallet', color: 'from-teal-800 to-teal-950' },
   { slug: 'tax', name: 'מיסוי', description: 'מסים על השקעות וחיסכון', icon: 'Receipt', color: 'from-stone-800 to-stone-950' },
   { slug: 'economy', name: 'כלכלה ומדיניות', description: 'ריבית, תוצר, מטבע והמשק הרחב', icon: 'Landmark', color: 'from-cyan-800 to-slate-950' },
   { slug: 'people', name: 'אישים בכלכלה', description: 'כלכלנים, הוגים וחוקרים שעיצבו את השיח הכלכלי', icon: 'UserRound', color: 'from-fuchsia-800 to-purple-950' },
   { slug: 'theory', name: 'אסכולות ותזות', description: 'רעיונות, מודלים וויכוחים מרכזיים בכלכלה', icon: 'LibraryBig', color: 'from-blue-800 to-slate-950' },
+  { slug: 'microeconomics', name: 'מיקרו־כלכלה', description: 'בחירה, תמריצים, שווקים והתנהגות צרכנים', icon: 'Scale', color: 'from-emerald-800 to-teal-950' },
+  { slug: 'research', name: 'מחקר וסטטיסטיקה', description: 'נתונים, שיטות מחקר והסקה כלכלית', icon: 'ChartScatter', color: 'from-indigo-800 to-slate-950' },
+  { slug: 'labor-environment', name: 'עבודה, חברה וסביבה', description: 'תעסוקה, אי־שוויון, משאבים וקיימות', icon: 'Leaf', color: 'from-lime-800 to-emerald-950' },
+  { slug: 'banking', name: 'בנקאות ואשראי', description: 'כסף, תיווך פיננסי, הלוואות ויציבות', icon: 'Building2', color: 'from-sky-800 to-blue-950' },
+  { slug: 'insurance', name: 'ביטוח', description: 'ניהול סיכונים, כיסויים וחוזי ביטוח', icon: 'Umbrella', color: 'from-cyan-800 to-teal-950' },
+  { slug: 'household', name: 'כלכלת המשפחה', description: 'תקציב, חיסכון והחלטות בחיי היום־יום', icon: 'House', color: 'from-amber-800 to-orange-950' },
+  { slug: 'business', name: 'עסקים וחשבונאות', description: 'ניהול עסק, דוחות כספיים ועלויות', icon: 'BriefcaseBusiness', color: 'from-stone-800 to-zinc-950' },
   { slug: 'faq', name: 'שאלות נפוצות', description: 'תשובות קצרות לשאלות חוזרות', icon: 'HelpCircle', color: 'from-violet-800 to-violet-950' },
 ];
 
@@ -101,7 +114,7 @@ const makeStubEntry = ({
   updatedAt: '2026-06-08',
 });
 
-export const entries: Entry[] = [
+const originalEntries: Entry[] = [
   {
     slug: 'mania',
     title: 'מהי מניה?',
@@ -1372,6 +1385,24 @@ export const entries: Entry[] = [
   }),
 ];
 
+export const entries: Entry[] = originalEntries.map(entry => {
+  const seedPatch = seedEnhancements[entry.slug];
+  const stubPatch = stubEnhancements[entry.slug];
+  const patch = seedPatch || stubPatch ? { ...seedPatch, ...stubPatch } : undefined;
+  const { addition, ...fields } = patch ?? {};
+  const sourceText = fields.fullDescription ?? entry.fullDescription;
+  const sources = [...sourceText.matchAll(/\[(https?:\/\/[^\s\]]+)\s+([^\]]+)\]/g)]
+    .map(match => ({ url: match[1], title: match[2] }));
+  const body = sourceText.replace(/(?:==[^\n]*==|##[^\n]*)\n(?:\* \[[\s\S]*)$/, '').trim();
+  return {
+    ...entry, ...fields,
+    fullDescription: addition ? `${body}\n\n${addition}` : sourceText,
+    sources: fields.sources ?? (sources.length ? sources : undefined),
+    contentStatus: entry.tags.includes('קצרמר') ? 'stub' : 'article',
+    updatedAt: patch ? '2026-09-16' : entry.updatedAt,
+  };
+});
+
 // עזרים
 const entryFromRevision = (revision: ApprovedRevision, base?: Entry): Entry => ({
   slug: revision.entry_slug,
@@ -1389,6 +1420,9 @@ const entryFromRevision = (revision: ApprovedRevision, base?: Entry): Entry => (
   related: base?.related ?? [],
   views: base?.views ?? 0,
   updatedAt: revision.reviewed_at ?? revision.created_at,
+  sources: base?.sources,
+  contentStatus: revision.tags?.includes('קצרמר') ? 'stub' : 'article',
+  aliases: base?.aliases,
 });
 
 export const mergeApprovedRevisions = (

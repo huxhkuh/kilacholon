@@ -65,15 +65,17 @@ export default function Profile() {
   async function uploadAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     if (!user || !e.target.files?.[0]) return;
     const file = e.target.files[0];
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) { toast.error("יש לבחור תמונת JPG, PNG או WebP"); return; }
     if (file.size > 2 * 1024 * 1024) { toast.error("קובץ גדול מ-2MB"); return; }
     setUploading(true);
-    const ext = file.name.split(".").pop();
+    const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[file.type];
     const path = `${user.id}/avatar.${ext}`;
     const { error: upErr } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
     if (upErr) { setUploading(false); toast.error(upErr.message); return; }
     const { data } = supabase.storage.from("avatars").getPublicUrl(path);
     const url = `${data.publicUrl}?v=${Date.now()}`;
-    await supabase.from("profiles").update({ avatar_url: url }).eq("id", user.id);
+    const { error: saveError } = await supabase.from("profiles").update({ avatar_url: url }).eq("id", user.id);
+    if (saveError) { setUploading(false); toast.error("התמונה הועלתה אך עדכון הפרופיל נכשל"); return; }
     setAvatarUrl(url);
     setUploading(false);
     toast.success("התמונה עודכנה");

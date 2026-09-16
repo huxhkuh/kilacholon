@@ -49,7 +49,7 @@ type Block =
   | { kind: "list"; items: ListItem[] }
   | { kind: "dl"; items: { term?: string; def?: string }[] }
   | { kind: "indent"; level: number; text: string }
-  | { kind: "raw"; html: string };
+  ;
 
 type ListItem = { marker: string; text: string; children: ListItem[] };
 
@@ -101,7 +101,7 @@ function parseBlocks(src: string): Block[] {
 
     // markdown heading ## ...
     const mh = line.match(/^(#{1,6})\s+(.+?)\s*$/);
-    if (mh && /^#+\s/.test(line) && !/^#\s*\S/.test(line)) {
+    if (mh && mh[1].length >= 2) {
       // Only treat ## or deeper as heading; single # is a list item in wiki
       if (mh[1].length >= 2) {
         flushPara(); blocks.push({ kind: "heading", level: mh[1].length, text: mh[2] }); continue;
@@ -206,7 +206,7 @@ function renderBlock(b: Block, key: React.Key, knownEntries: typeof entries): Re
         : lvl === 3
         ? "heading-display text-xl md:text-2xl text-primary mt-6 mb-2"
         : "font-semibold text-lg text-primary mt-5 mb-2";
-      return React.createElement(`h${lvl}`, { key, className: cls }, renderInline(b.text, knownEntries));
+      return React.createElement(`h${lvl}`, { key, id: anchorize(b.text), className: cls + " scroll-mt-24" }, renderInline(b.text, knownEntries));
     }
     case "paragraph":
       return <p key={key} className="my-3 leading-[1.95]">{renderInline(b.text, knownEntries)}</p>;
@@ -229,8 +229,6 @@ function renderBlock(b: Block, key: React.Key, knownEntries: typeof entries): Re
       );
     case "list":
       return <RenderList key={key} items={b.items} knownEntries={knownEntries} />;
-    case "raw":
-      return <div key={key} dangerouslySetInnerHTML={{ __html: b.html }} />;
   }
 }
 
@@ -336,7 +334,7 @@ function renderInline(text: string, knownEntries: typeof entries): React.ReactNo
     const entry = knownEntries.find(e => e.slug === slug || e.title === displaySlug.trim());
     const exists = !!entry;
     const finalLabel = (label?.trim() || entry?.title || displaySlug) + suffix;
-    const to = `/entry/${entry?.slug || slug}${anchor ? `#${anchorize(anchor)}` : ""}`;
+    const to = `/entry/${encodeURIComponent(entry?.slug || slug)}${anchor ? `#${anchorize(anchor)}` : ""}`;
 
     return (
       <Link
@@ -350,6 +348,14 @@ function renderInline(text: string, knownEntries: typeof entries): React.ReactNo
         {finalLabel}
       </Link>
     );
+  });
+
+  // Markdown links are parsed before bare URLs; only safe protocols/internal paths.
+  replace(/\[([^\]\n]+)\]\(([^\s)]+)\)/g, m => {
+    const href = m[2];
+    if (/^\/(?!\/)/.test(href) && !href.includes("\\")) return <Link to={href}>{m[1]}</Link>;
+    if (!/^https?:\/\//i.test(href)) return <>{m[1]}</>;
+    return <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-4">{m[1]}</a>;
   });
 
   // 3. External bracketed links [http://... label]
@@ -368,7 +374,7 @@ function renderInline(text: string, knownEntries: typeof entries): React.ReactNo
 
   // 5. Bold/italic — wiki + markdown
   //   ''''' = bold-italic, ''' = bold, '' = italic
-  replace(/'''''(.+?)'''''/g, m => <strong key={Math.random()}><em>{renderInlineSimple(m[1])}</em></strong>);
+  replace(/'''''(.+?)'''''/g, m => <strong><em>{renderInlineSimple(m[1])}</em></strong>);
   replace(/'''(.+?)'''/g, m => <strong>{renderInlineSimple(m[1])}</strong>);
   replace(/''(.+?)''/g, m => <em>{renderInlineSimple(m[1])}</em>);
   replace(/\*\*(.+?)\*\*/g, m => <strong>{renderInlineSimple(m[1])}</strong>);
@@ -391,7 +397,7 @@ function renderInline(text: string, knownEntries: typeof entries): React.ReactNo
       const [k, v] = decl.split(":").map(s => s && s.trim());
       if (!k || !v) return;
       const camel = k.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-      Object.assign(style, { [camel]: v });
+      if (["color", "backgroundColor", "fontWeight", "fontStyle", "textDecoration"].includes(camel) && !/url|expression|[<>]/i.test(v)) Object.assign(style, { [camel]: v });
     });
     return <span style={style}>{renderInlineSimple(m[2])}</span>;
   });
@@ -400,7 +406,7 @@ function renderInline(text: string, knownEntries: typeof entries): React.ReactNo
   // eslint-disable-next-line no-control-regex -- internal sentinel never comes from rendered HTML
   replace(/\u0001NW(\d+)\u0001/g, m => <>{nowikis[+m[1]]}</>);
 
-  // 8. HTML entities — let the browser handle via dangerouslySetInnerHTML for text-only segs
+  // 8. Decode entities as text; React escapes the result.
   return segs.map((s, i) => s.type === "text"
     ? <React.Fragment key={i}>{decodeEntities(s.v)}</React.Fragment>
     : <React.Fragment key={i}>{s.v}</React.Fragment>
@@ -474,7 +480,7 @@ function renderTemplate(name: string, args: string[], knownEntries: typeof entri
     case "כ":
       return "\u200E"; // left-to-right mark to fix punctuation flow
     case "רווח קשיח":
-      return "\u00a0".repeat(Math.max(1, parseInt(args[0] || "1", 10)));
+      return "\u00a0".repeat(Math.min(100, Math.max(1, parseInt(args[0] || "1", 10) || 1)));
     case "רווח קל":
       return "\u2009";
     case "מימין לשמאל":
@@ -535,7 +541,7 @@ function renderInlineLink(target: string, knownEntries: typeof entries): React.R
   const slug = target.trim().replace(/\s+/g, "-");
   const entry = knownEntries.find(e => e.slug === slug || e.title === target.trim());
   return (
-    <Link to={`/entry/${entry?.slug || slug}`} className="text-primary underline decoration-primary/30 hover:decoration-primary">
+    <Link to={`/entry/${encodeURIComponent(entry?.slug || slug)}`} className="text-primary underline decoration-primary/30 hover:decoration-primary">
       {entry?.title || target}
     </Link>
   );

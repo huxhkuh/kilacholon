@@ -1,122 +1,59 @@
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Search } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Search } from "lucide-react";
 import Layout from "@/components/Layout";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getCategory, type Entry } from "@/data/content";
 import { Badge } from "@/components/ui/badge";
 import { usePublishedEntries } from "@/hooks/usePublishedEntries";
 import { useReadEntries } from "@/hooks/useReadEntries";
+import { isStubEntry, normalizeSearch, searchEntries } from "@/lib/entry-search";
 
-const HE_LETTERS = ["א","ב","ג","ד","ה","ו","ז","ח","ט","י","כ","ל","מ","נ","ס","ע","פ","צ","ק","ר","ש","ת"];
+const LETTERS = ["א", "ב", "ג", "ד", "ה", "ו", "ז", "ח", "ט", "י", "כ", "ל", "מ", "נ", "ס", "ע", "פ", "צ", "ק", "ר", "ש", "ת"];
+const finalLetters: Record<string, string> = { ך: "כ", ם: "מ", ן: "נ", ף: "פ", ץ: "צ" };
+function firstLetter(title: string) { const letter = normalizeSearch(title)[0] ?? ""; return LETTERS.includes(letter) ? letter : finalLetters[letter] ?? "#"; }
 
 export default function Dictionary() {
   const { entries } = usePublishedEntries();
   const { isRead, readCount } = useReadEntries();
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const [letter, setLetter] = useState("all");
+  const [type, setType] = useState("all");
+  const [visible, setVisible] = useState(60);
+  const matching = useMemo(() => searchEntries(entries, deferredQuery)
+    .filter(entry => type === "all" || (type === "stub" ? isStubEntry(entry) : !isStubEntry(entry)))
+    .sort((a, b) => a.title.localeCompare(b.title, "he")), [entries, deferredQuery, type]);
+  const available = new Set(matching.map(entry => firstLetter(entry.title)));
+  const filtered = matching.filter(entry => letter === "all" || firstLetter(entry.title) === letter);
+  const grouped = new Map<string, Entry[]>();
+  filtered.slice(0, visible).forEach(entry => { const key = firstLetter(entry.title); grouped.set(key, [...(grouped.get(key) ?? []), entry]); });
 
-  const grouped = useMemo(() => {
-    const filtered = query.trim()
-      ? entries.filter(e => e.title.includes(query.trim()) || e.shortDescription.includes(query.trim()))
-      : entries;
-    const sorted = [...filtered].sort((a, b) => a.title.localeCompare(b.title, 'he'));
-    const map = new Map<string, Entry[]>();
-    for (const e of sorted) {
-      const letter = e.title.charAt(0);
-      if (!map.has(letter)) map.set(letter, []);
-      map.get(letter)!.push(e);
-    }
-    return map;
-  }, [entries, query]);
-
-  const availableLetters = Array.from(grouped.keys());
-
-  return (
-    <Layout>
-      <div className="container py-12 md:py-16">
-        <div className="max-w-3xl mx-auto text-center mb-10">
-          <span className="gold-divider mb-4" />
-          <h1 className="heading-display text-3xl md:text-5xl text-primary mb-3">מילון מושגים</h1>
-          <p className="text-muted-foreground text-lg leading-relaxed mb-6">
-            כל המושגים באנציקלופדיה השיתופית, מסודרים אלפביתית. לחצו על מושג כדי לקרוא, לערוך ולהרחיב.
-          </p>
-          {readCount > 0 && <p className="text-sm text-emerald-700 mb-5">קראתם כבר {readCount} ערכים בדפדפן הזה.</p>}
-
-          <div className="relative max-w-xl mx-auto">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="חיפוש מושג..."
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              className="pr-10 h-12 text-base"
-            />
-          </div>
-          <div className="mt-6">
-            <Link to="/edit?draft=1" className="inline-flex items-center rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary-soft transition-colors">
-              חסר מושג? כתבו ערך חדש
-            </Link>
-          </div>
-        </div>
-
-        {/* טבלת אותיות */}
-        <div className="flex flex-wrap justify-center gap-1.5 mb-10 max-w-3xl mx-auto">
-          {HE_LETTERS.map(l => {
-            const has = availableLetters.includes(l);
-            return (
-              <a
-                key={l}
-                href={has ? `#letter-${l}` : undefined}
-                className={`w-9 h-9 flex items-center justify-center rounded-md text-sm font-display font-semibold transition-colors ${
-                  has
-                    ? "bg-card border border-border text-primary hover:bg-primary hover:text-primary-foreground hover:border-primary cursor-pointer"
-                    : "bg-muted/40 text-muted-foreground/40 cursor-default"
-                }`}
-              >
-                {l}
-              </a>
-            );
-          })}
-        </div>
-
-        {/* רשימה */}
-        <div className="max-w-4xl mx-auto space-y-10">
-          {availableLetters.length === 0 && (
-            <p className="text-center text-muted-foreground py-12">לא נמצאו מושגים תואמים.</p>
-          )}
-          {availableLetters.map(letter => (
-            <section key={letter} id={`letter-${letter}`} className="scroll-mt-20">
-              <h2 className="heading-display text-3xl text-gold-deep mb-4 pb-2 border-b border-gold/30">
-                {letter}
-              </h2>
-              <div className="space-y-3">
-                {grouped.get(letter)!.map(entry => {
-                  const cat = getCategory(entry.category);
-                  return (
-                    <Link
-                      key={entry.slug}
-                      to={`/entry/${entry.slug}`}
-                      className="block rounded-lg border border-border/70 bg-card p-4 hover:border-gold/40 hover:shadow-card transition-all group"
-                    >
-                      <div className="flex items-start justify-between gap-3 mb-1">
-                        <h3 className="font-display font-semibold text-lg text-foreground group-hover:text-primary transition-colors">
-                          {entry.title}
-                        </h3>
-                        {cat && <Badge variant="secondary" className="bg-accent/60 text-accent-foreground text-[11px]">{cat.name}</Badge>}
-                        {isRead(entry.slug) && (
-                          <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
-                            <CheckCircle2 className="h-3.5 w-3.5" /> נקרא
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground leading-relaxed">{entry.shortDescription}</p>
-                    </Link>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
-      </div>
-    </Layout>
-  );
+  return <Layout><div className="container page-space">
+    <div className="page-heading"><h1>מילים קטנות. הבנה גדולה.</h1><p>מילון המושגים של מיכלכלה, מסודר מא׳ ועד ת׳.</p></div>
+    <div className="dictionary-toolbar">
+      <div className="search-field"><Search aria-hidden="true" /><label htmlFor="dictionary-search" className="sr-only">חיפוש במילון המושגים</label><Input id="dictionary-search" type="search" placeholder="איזה מושג מסקרן אתכם?" value={query} onChange={event => { setQuery(event.target.value); setLetter("all"); setVisible(60); }} /></div>
+      <ToggleGroup type="single" variant="outline" value={type} onValueChange={value => { if (value) { setType(value); setVisible(60); } }} aria-label="סוג ערך" dir="rtl">
+        <ToggleGroupItem value="all">הכול</ToggleGroupItem><ToggleGroupItem value="full">מלאים</ToggleGroupItem><ToggleGroupItem value="stub">קצרמרים</ToggleGroupItem>
+      </ToggleGroup>
+    </div>
+    <nav className="alphabet-nav" aria-label="סינון לפי אות ראשונה">
+      <button type="button" className={letter === "all" ? "selected" : undefined} aria-pressed={letter === "all"} onClick={() => { setLetter("all"); setVisible(60); }}>הכול</button>
+      {[...LETTERS, ...(available.has("#") ? ["#"] : [])].map(item => <button key={item} type="button" disabled={!available.has(item)} aria-label={item === "#" ? "אותיות לועזיות ומספרים" : `ערכים באות ${item}`} aria-pressed={letter === item} className={letter === item ? "selected" : undefined} onClick={() => { setLetter(item); setVisible(60); }}>{item}</button>)}
+    </nav>
+    <div className="results-summary"><p role="status">{filtered.length} ערכים{letter !== "all" ? ` באות ${letter}` : " במילון"}</p>{readCount > 0 && <span>קראתם {readCount} ערכים בדפדפן הזה</span>}</div>
+    <div className="dictionary-list">
+      {[...grouped].map(([initial, list]) => <section key={initial} className="dictionary-group" aria-labelledby={`letter-${initial}`}>
+        <h2 id={`letter-${initial}`} className="dictionary-letter">{initial}</h2>
+        <div className="min-w-0">{list.map(entry => <Link key={entry.slug} to={`/entry/${entry.slug}`} className="dictionary-entry group">
+          <div className="min-w-0"><div className="flex flex-wrap gap-2 items-center"><h3 className="font-display text-2xl font-bold group-hover:text-primary">{entry.title}</h3>{isStubEntry(entry) && <Badge variant="secondary">קצרמר</Badge>}{isRead(entry.slug) && <CheckCircle2 className="size-4 text-muted-foreground" aria-label="נקרא" />}</div><p className="text-muted-foreground leading-relaxed mt-1 line-clamp-2">{entry.shortDescription}</p></div>
+          <span className="dictionary-category">{getCategory(entry.category)?.name}</span><ArrowLeft className="size-4 shrink-0 text-primary" aria-hidden="true" />
+        </Link>)}</div>
+      </section>)}
+    </div>
+    {!filtered.length && <div className="empty-state"><h2>המושג שחיפשתם עדיין לא נמצא</h2><p>נסו לכתוב אחרת או הציעו ערך חדש למילון.</p><Button asChild variant="outline"><Link to="/edit?draft=1">הצעת ערך חדש</Link></Button></div>}
+    <div className="load-more"><p>מוצגים {Math.min(visible, filtered.length)} מתוך {filtered.length} ערכים</p>{visible < filtered.length && <Button size="lg" variant="outline" onClick={() => setVisible(count => count + 60)}>הצגת ערכים נוספים</Button>}</div>
+  </div></Layout>;
 }

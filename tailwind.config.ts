@@ -15,7 +15,7 @@ export default {
     },
     extend: {
       fontFamily: {
-        display: ['Rubik', 'system-ui', 'sans-serif'],
+        display: ['Frank Ruhl Libre', 'Rubik', 'Georgia', 'serif'],
         sans: ['Assistant', 'system-ui', 'sans-serif'],
       },
       colors: {

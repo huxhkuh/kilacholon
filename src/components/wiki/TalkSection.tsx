@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { MessageCircle, Send, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,17 +21,51 @@ export default function TalkSection({ slug }: { slug: string }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const loadRequest = useRef(0);
+  const activeSlug = useRef<string | null>(null);
 
   const load = useCallback(async () => {
-    const { data } = await supabase
-      .from("entry_talk")
-      .select("id, body, author_id, created_at, profiles:author_id(display_name, avatar_url)")
-      .eq("entry_slug", slug)
-      .order("created_at", { ascending: false });
-    setComments((data ?? []) as unknown as Comment[]);
+    if (activeSlug.current !== slug) return;
+    const request = ++loadRequest.current;
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const { data, error } = await supabase
+        .from("entry_talk")
+        .select("id, body, author_id, created_at")
+        .eq("entry_slug", slug)
+        .order("created_at", { ascending: false }).limit(100);
+      if (request !== loadRequest.current) return;
+      const ids = [...new Set((data ?? []).map(row => row.author_id))];
+      const profiles = ids.length ? await supabase.from('profiles').select('id, display_name, avatar_url').in('id', ids) : { data: [] };
+      if (request !== loadRequest.current) return;
+      const byId = new Map((profiles.data ?? []).map(profile => [profile.id, profile]));
+      setComments((data ?? []).map(row => ({ ...row, profiles: byId.get(row.author_id) })));
+      setLoadError(!!error);
+      setLoading(false);
+    } catch {
+      if (request !== loadRequest.current) return;
+      setLoadError(true); setLoading(false);
+    }
   }, [slug]);
 
-  useEffect(() => { load(); }, [load]);
+  const cancelLoad = useCallback(() => {
+    activeSlug.current = null;
+    loadRequest.current += 1;
+  }, []);
+
+  useEffect(() => {
+    activeSlug.current = slug;
+    setComments([]);
+    setBody("");
+    setBusy(false);
+    setRemoving(null);
+    void load();
+    return cancelLoad;
+  }, [load, slug, cancelLoad]);
 
   async function submit() {
     if (!user) return;
@@ -41,6 +75,7 @@ export default function TalkSection({ slug }: { slug: string }) {
     const { error } = await supabase.from("entry_talk").insert({
       entry_slug: slug, author_id: user.id, body: body.trim(),
     });
+    if (activeSlug.current !== slug) return;
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     setBody("");
@@ -48,8 +83,12 @@ export default function TalkSection({ slug }: { slug: string }) {
   }
 
   async function remove(id: string) {
-    await supabase.from("entry_talk").delete().eq("id", id);
-    load();
+    setRemoving(id);
+    const { error } = await supabase.from("entry_talk").delete().eq("id", id);
+    if (activeSlug.current !== slug) return;
+    setRemoving(null);
+    if (error) { toast.error('לא ניתן למחוק את התגובה כרגע'); return; }
+    void load();
   }
 
   return (
@@ -57,6 +96,7 @@ export default function TalkSection({ slug }: { slug: string }) {
       {user ? (
         <div className="rounded-xl border border-border bg-card p-4">
           <Textarea
+            aria-label="תגובה לדיון"
             value={body}
             onChange={e => setBody(e.target.value)}
             placeholder="הוסיפו דיון, שאלה או הצעת תיקון לערך..."
@@ -78,7 +118,7 @@ export default function TalkSection({ slug }: { slug: string }) {
         </div>
       )}
 
-      {comments.length === 0 ? (
+      {loading ? <p role="status">טוען דיון…</p> : loadError ? <div><p>לא ניתן לטעון את הדיון כרגע.</p><Button variant="outline" onClick={() => void load()}>ניסיון נוסף</Button></div> : comments.length === 0 ? (
         <div className="text-center text-sm text-muted-foreground py-8">
           <MessageCircle className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
           עדיין אין דיון על הערך הזה. התחילו את השיחה.
@@ -98,7 +138,7 @@ export default function TalkSection({ slug }: { slug: string }) {
                     <div className="flex items-center gap-2">
                       <time className="text-xs text-muted-foreground">{new Date(c.created_at).toLocaleDateString("he-IL")}</time>
                       {(user?.id === c.author_id || isEditor) && (
-                        <button onClick={() => remove(c.id)} className="text-muted-foreground hover:text-destructive">
+                        <button aria-label="מחיקת תגובה" disabled={removing !== null} onClick={() => remove(c.id)} className="text-muted-foreground hover:text-destructive disabled:opacity-50">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       )}
