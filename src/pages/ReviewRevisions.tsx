@@ -9,8 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
-import { usePublishedEntries } from "@/hooks/usePublishedEntries";
-import { revisionDiff } from "@/lib/revisionDiff";
+import PublishedComparison from '@/components/wiki/PublishedComparison';
 import { Textarea } from "@/components/ui/textarea";
 
 type Revision = Tables<"entry_revisions">;
@@ -20,7 +19,6 @@ export default function ReviewRevisions() {
   const queryClient = useQueryClient();
   const { user, isEditor, loading } = useAuth();
   const [revisions, setRevisions] = useState<Revision[]>([]);
-  const { entries } = usePublishedEntries();
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [queueLoading, setQueueLoading] = useState(true);
@@ -129,14 +127,7 @@ export default function ReviewRevisions() {
                   {revision.content}
                 </div>
 
-                <details className="rounded-md border border-border mb-4 p-3">
-                  <summary className="font-semibold text-primary cursor-pointer">השוואה לערך שפורסם</summary>
-                  <div className="mt-3 text-sm whitespace-pre-wrap max-h-96 overflow-auto" dir="rtl">
-                    {revisionDiff(entries.find(entry => entry.slug === revision.entry_slug)?.fullDescription ?? '', revision.content).map((line, index) => <div key={index} className={line.type === 'added' ? 'bg-emerald-50 text-emerald-950' : line.type === 'removed' ? 'bg-rose-50 text-rose-950 line-through' : ''}>
-                      <span className="inline-block w-5" aria-label={line.type === 'added' ? 'נוסף' : line.type === 'removed' ? 'הוסר' : ''}>{line.type === 'added' ? '+' : line.type === 'removed' ? '−' : ' '}</span>{line.text || ' '}
-                    </div>)}
-                  </div>
-                </details>
+                <PublishedComparison slug={revision.entry_slug} content={revision.content} />
                 <label className="block text-sm mb-4">הערה לכותב (לא חובה)
                   <Textarea className="mt-2" maxLength={2000} value={notes[revision.id] ?? ''} onChange={event => setNotes(current => ({ ...current, [revision.id]: event.target.value }))} placeholder="מה כדאי לשפר או מה נבדק?" />
                 </label>

@@ -26,7 +26,7 @@ type Tab = "article" | "talk" | "history";
 export default function EntryPage() {
   const { slug = "" } = useParams();
   const navigate = useNavigate();
-  const { entries, isLoading } = usePublishedEntries();
+  const { entries, isLoading, isCommunityLoading, catalogError, communityError, retry } = usePublishedEntries(slug);
   const { markRead } = useReadEntries();
   const { isSaved, toggleSaved } = useSavedEntries();
   const [fontSize, setFontSize] = useState(18);
@@ -48,11 +48,19 @@ export default function EntryPage() {
     document.querySelector('meta[property="og:title"]')?.setAttribute("content", document.title);
     document.querySelector('meta[property="og:description"]')?.setAttribute("content", description);
     document.querySelector('link[rel="canonical"]')?.setAttribute("href", canonical);
-    if (tab === "article") markRead(entry.slug);
+    if (tab === "article" && !entry.contentFile) markRead(entry.slug);
   }, [entry, markRead, tab]);
 
-  if (!entry && isLoading) {
-    return <Layout><div className="container py-24 text-center text-muted-foreground">טוען ערך...</div></Layout>;
+  if (entry?.contentFile || (!entry && (isLoading || isCommunityLoading || communityError))) {
+    return <Layout><div className="container py-16 max-w-3xl">
+      <h1 className="heading-display text-3xl text-primary mb-4">{entry?.title ?? 'טעינת ערך'}</h1>
+      {entry && <p className="mb-5 text-muted-foreground">{entry.shortDescription}</p>}
+      {catalogError || (!entry && communityError) ? <div role="alert"><p>תוכן הערך לא נטען כרגע. זו בעיית טעינה, ולא הודעה שהערך אינו קיים.</p>
+        <div className="flex flex-wrap gap-3 mt-5"><Button onClick={retry}>ניסיון נוסף</Button>
+          {entry?.contentFile && <Button variant="outline" asChild><a href={`${appUrl(`/entry/${entry.slug}`)}?view=static`}>פתיחת דף הקריאה</a></Button>}
+          <Button variant="outline" asChild><Link to="/dictionary">לכל הערכים</Link></Button></div>
+      </div> : <p role="status">טוען את תוכן הערך…</p>}
+    </div></Layout>;
   }
 
   if (!entry) {

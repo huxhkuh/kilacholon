@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { usePublishedEntries } from "@/hooks/usePublishedEntries";
 import { useReadEntries } from "@/hooks/useReadEntries";
 import { isStubEntry, normalizeSearch, searchEntries } from "@/lib/entry-search";
+import { appUrl } from '@/lib/urls';
 
 const LETTERS = ["א", "ב", "ג", "ד", "ה", "ו", "ז", "ח", "ט", "י", "כ", "ל", "מ", "נ", "ס", "ע", "פ", "צ", "ק", "ר", "ש", "ת"];
 const finalLetters: Record<string, string> = { ך: "כ", ם: "מ", ן: "נ", ף: "פ", ץ: "צ" };
@@ -54,6 +55,9 @@ export default function Dictionary() {
       </section>)}
     </div>
     {!filtered.length && <div className="empty-state"><h2>המושג שחיפשתם עדיין לא נמצא</h2><p>נסו לכתוב אחרת או הציעו ערך חדש למילון.</p><Button asChild variant="outline"><Link to="/edit?draft=1">הצעת ערך חדש</Link></Button></div>}
-    <div className="load-more"><p>מוצגים {Math.min(visible, filtered.length)} מתוך {filtered.length} ערכים</p>{visible < filtered.length && <Button size="lg" variant="outline" onClick={() => setVisible(count => count + 60)}>הצגת ערכים נוספים</Button>}</div>
+    <div className="load-more"><p>מוצגים {Math.min(visible, filtered.length)} מתוך {filtered.length} ערכים</p>{visible < filtered.length && <div className="flex flex-wrap justify-center gap-3">
+      <Button size="lg" variant="outline" onClick={() => setVisible(count => count + 60)}>הצגת ערכים נוספים</Button>
+      <Button size="lg" onClick={() => setVisible(filtered.length)}>הצגת כל {filtered.length} הערכים</Button>
+    </div>}<a className="text-link" href={`${appUrl('/dictionary/')}?view=static`}>גרסת קריאה פשוטה</a></div>
   </div></Layout>;
 }

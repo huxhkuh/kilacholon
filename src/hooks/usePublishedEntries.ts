@@ -1,14 +1,19 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { entries as seedEntries, mergeApprovedRevisions, type ApprovedRevision } from '@/data/content';
+import { mergeApprovedRevisions, type ApprovedRevision } from '@/data/content';
+import { embeddedArticle, fetchArticle, referenceEntries, referenceBySlug } from '@/data/reference';
 
-export function usePublishedEntries() {
+export function usePublishedEntries(slug?: string) {
+  const metadata = referenceBySlug.get(slug ?? '');
   const library = useQuery({
-    queryKey: ['reference-catalog'],
-    queryFn: () => import('@/data/catalog').then(module => module.loadCatalog()),
+    queryKey: ['reference-entry', slug, metadata?.contentFile],
+    queryFn: ({ signal }) => fetchArticle(metadata!, signal),
+    enabled: !!metadata?.contentFile,
+    initialData: () => embeddedArticle(metadata),
     staleTime: Infinity,
     gcTime: Infinity,
+    retry: 1,
   });
   const revisions = useQuery({
     queryKey: ['approved-entry-revisions'],
@@ -29,14 +34,17 @@ export function usePublishedEntries() {
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
-  const entries = useMemo(() => mergeApprovedRevisions(library.data ?? seedEntries, revisions.data ?? []), [library.data, revisions.data]);
+  const entries = useMemo(() => {
+    const base = library.data ? referenceEntries.map(entry => entry.slug === library.data.slug ? library.data : entry) : referenceEntries;
+    return mergeApprovedRevisions(base, revisions.data ?? []);
+  }, [library.data, revisions.data]);
   return {
     entries,
-    isLoading: library.isPending,
+    isLoading: !!metadata?.contentFile && library.isPending,
     isCommunityLoading: revisions.isPending,
     error: library.error ?? revisions.error,
     catalogError: library.error,
     communityError: revisions.error,
-    retry: () => { void library.refetch(); void revisions.refetch(); },
+    retry: () => { if (metadata?.contentFile) void library.refetch(); if (revisions.error) void revisions.refetch(); },
   };
 }

@@ -38,7 +38,7 @@ function Editor() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, loading: authLoading } = useAuth();
-  const { entries: publishedEntries, isLoading: catalogLoading, isCommunityLoading, catalogError, communityError } = usePublishedEntries();
+  const { entries: publishedEntries, isLoading: catalogLoading, isCommunityLoading, catalogError, communityError, retry } = usePublishedEntries(slug);
 
   const existing = getEntry(slug, publishedEntries);
   const isNew = !slug;
@@ -87,7 +87,7 @@ function Editor() {
   const explTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
-    if (catalogLoading || isCommunityLoading || !existing || initializedSlug.current === existing.slug) return;
+    if (catalogLoading || isCommunityLoading || catalogError || existing?.contentFile || !existing || initializedSlug.current === existing.slug) return;
     initializedSlug.current = existing.slug;
     setTitle(localDraft?.title ?? existing.title);
     setCategory(localDraft?.category ?? existing.category);
@@ -98,7 +98,7 @@ function Editor() {
     setIsStubEntry(stub);
     if (!localDraft) setExpandMode(stub);
     setEditorInitialized(true);
-  }, [catalogLoading, isCommunityLoading, existing, localDraft]);
+  }, [catalogLoading, isCommunityLoading, catalogError, existing, localDraft]);
 
   useEffect(() => {
     document.title = isNew ? `ערך חדש — מיכלכלה` : `עריכה: ${existing?.title} — מיכלכלה`;
@@ -334,9 +334,9 @@ function Editor() {
 
   const linkableEntries = useMemo(() => publishedEntries, [publishedEntries]);
 
-  if (authLoading || catalogLoading || isCommunityLoading || (!isNew && existing && !editorInitialized)) return <Layout><div className="container py-24 text-center text-muted-foreground">טוען…</div></Layout>;
+  if (authLoading || catalogLoading || isCommunityLoading || (!isNew && existing && !editorInitialized && !catalogError)) return <Layout><div className="container py-24 text-center text-muted-foreground">טוען…</div></Layout>;
 
-  if (catalogError || (!isNew && !existing)) return <Layout><div className="container py-16"><h1>הערך אינו זמין לעריכה</h1><p>נסו לטעון שוב את העמוד, או חזרו למילון.</p><Button asChild><Link to="/dictionary">למילון</Link></Button></div></Layout>;
+  if (catalogError || (!isNew && !existing)) return <Layout><div className="container py-16"><h1>הערך אינו זמין לעריכה</h1><p>התוכן לא נטען; הטיוטה המקומית נשמרת ללא שינוי.</p><Button onClick={retry}>ניסיון נוסף</Button><Button asChild variant="outline"><Link to="/dictionary">למילון</Link></Button></div></Layout>;
 
   return (
     <Layout>
