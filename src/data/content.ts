@@ -31,6 +31,10 @@ export type Entry = {
   sources?: { title: string; url: string }[];
   contentStatus?: 'article' | 'stub';
   aliases?: string[];
+  /** Present only on index records whose article body is loaded separately. */
+  contentFile?: string;
+  searchText?: string;
+  readingTime?: number;
 };
 
 export type ApprovedRevision = {

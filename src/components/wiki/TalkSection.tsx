@@ -24,31 +24,51 @@ export default function TalkSection({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState(false);
+  const cursor = useRef<{ id: string; created_at: string } | null>(null);
+  const paging = useRef(false);
   const loadRequest = useRef(0);
   const activeSlug = useRef<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (activeSlug.current !== slug) return;
+  const load = useCallback(async (append = false) => {
+    if (activeSlug.current !== slug || (append && paging.current)) return;
+    paging.current = true;
     const request = ++loadRequest.current;
-    setLoading(true);
-    setLoadError(false);
+    if (append) { setLoadingMore(true); setMoreError(false); }
+    else { setLoading(true); setLoadError(false); setMoreError(false); setLoadingMore(false); }
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("entry_talk")
         .select("id, body, author_id, created_at")
         .eq("entry_slug", slug)
-        .order("created_at", { ascending: false }).limit(100);
+        .order("created_at", { ascending: false }).order("id", { ascending: false });
+      // Stable keyset pagination survives equal timestamps and concurrent deletes.
+      if (append && cursor.current) {
+        const { created_at, id } = cursor.current;
+        query = query.or(`created_at.lt.${created_at},and(created_at.eq.${created_at},id.lt.${id})`);
+      }
+      const { data, error } = await query.limit(101);
       if (request !== loadRequest.current) return;
-      const ids = [...new Set((data ?? []).map(row => row.author_id))];
+      if (error) throw error;
+      const page = (data ?? []).slice(0, 100);
+      const ids = [...new Set(page.map(row => row.author_id))];
       const profiles = ids.length ? await supabase.from('profiles').select('id, display_name, avatar_url').in('id', ids) : { data: [] };
       if (request !== loadRequest.current) return;
       const byId = new Map((profiles.data ?? []).map(profile => [profile.id, profile]));
-      setComments((data ?? []).map(row => ({ ...row, profiles: byId.get(row.author_id) })));
-      setLoadError(!!error);
-      setLoading(false);
+      const next = page.map(row => ({ ...row, profiles: byId.get(row.author_id) }));
+      setComments(current => append ? [...current, ...next.filter(row => !current.some(item => item.id === row.id))] : next);
+      cursor.current = page[page.length - 1] ?? null;
+      setHasMore((data ?? []).length > 100);
     } catch {
       if (request !== loadRequest.current) return;
-      setLoadError(true); setLoading(false);
+      if (append) setMoreError(true); else setLoadError(true);
+    } finally {
+      if (request === loadRequest.current) {
+        paging.current = false;
+        setLoading(false); setLoadingMore(false);
+      }
     }
   }, [slug]);
 
@@ -59,6 +79,9 @@ export default function TalkSection({ slug }: { slug: string }) {
 
   useEffect(() => {
     activeSlug.current = slug;
+    cursor.current = null;
+    paging.current = false;
+    setHasMore(false);
     setComments([]);
     setBody("");
     setBusy(false);
@@ -151,6 +174,12 @@ export default function TalkSection({ slug }: { slug: string }) {
           ))}
         </div>
       )}
+      {!loading && !loadError && hasMore && <div className="text-center space-y-2">
+        {moreError && <p role="alert">לא ניתן לטעון תגובות נוספות. נסו שוב.</p>}
+        <Button variant="outline" disabled={loadingMore} onClick={() => void load(true)}>
+          {loadingMore ? "טוען תגובות…" : moreError ? "ניסיון נוסף לטעינת תגובות" : "תגובות קודמות"}
+        </Button>
+      </div>}
     </div>
   );
 }

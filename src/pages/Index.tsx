@@ -16,7 +16,7 @@ export default function Index() {
   const complete = useMemo(() => entries.filter(entry => !isStubEntry(entry)), [entries]);
   const spotlight = complete.find(entry => entry.slug === "ribit-deribit") ?? complete.find(entry => entry.title.includes("דריבית")) ?? complete[0];
   const featured = featuredEntries(complete).slice(0, 6);
-  const recent = recentEntries(complete).filter(entry => !featured.some(item => item.slug === entry.slug)).slice(0, 3);
+  const recent = recentEntries(complete.filter(entry => !featured.some(item => item.slug === entry.slug))).slice(0, 3);
   const stubCount = entries.length - complete.length;
   const categoryCounts = useMemo(() => {
     const counts = new Map<string, number>();
