@@ -42,7 +42,7 @@ export default function ReviewRevisions() {
       .from("entry_revisions")
       .select("*")
       .eq("status", "pending")
-      .order("created_at", { ascending: true }).limit(100);
+      .order("created_at", { ascending: true }).order("id", { ascending: true }).limit(100);
 
     setQueueLoading(false);
 
@@ -78,7 +78,9 @@ export default function ReviewRevisions() {
     }
 
     toast.success(status === "approved" ? "העריכה אושרה ופורסמה" : "העריכה נדחתה");
-    setRevisions(current => current.filter(item => item.id !== revision.id));
+    // Reload from the oldest pending row: an offset would skip rows as reviews
+    // remove them from the queue, and an empty local batch is not an empty queue.
+    await load();
   }
 
   if (loading || !isEditor) {
