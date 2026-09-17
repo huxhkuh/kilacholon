@@ -48,13 +48,13 @@ export default function AdminUsers() {
       return;
     }
     setBusy(userId + role);
-    if (has) {
-      await supabase.from("user_roles").delete().eq("user_id", userId).eq("role", role);
-    } else {
-      await supabase.from("user_roles").insert({ user_id: userId, role, granted_by: user!.id });
-    }
+    const { error } = has
+      ? await supabase.from("user_roles").delete().eq("user_id", userId).eq("role", role)
+      : await supabase.from("user_roles").insert({ user_id: userId, role, granted_by: user!.id });
     setBusy(null);
-    load();
+    if (error) { toast.error("שינוי ההרשאה נכשל. ההרשאה הקודמת נשמרה."); return; }
+    toast.success("ההרשאה עודכנה");
+    void load();
   }
 
   if (loading || !isAdmin) return <Layout><div className="container py-20 text-center text-muted-foreground">טוען...</div></Layout>;
@@ -93,7 +93,7 @@ export default function AdminUsers() {
                     <button
                       key={role}
                       onClick={() => toggleRole(r.id, role, has)}
-                      disabled={busy === r.id + role}
+                      disabled={busy !== null}
                       className={`text-xs px-2.5 py-1 rounded-full font-medium transition-all ${
                         has ? ROLE_COLORS[role] : "bg-background text-muted-foreground border border-dashed border-border hover:border-primary hover:text-primary"
                       }`}

@@ -9,6 +9,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { usePublishedEntries } from "@/hooks/usePublishedEntries";
+import { revisionDiff } from "@/lib/revisionDiff";
+import { Textarea } from "@/components/ui/textarea";
 
 type Revision = Tables<"entry_revisions">;
 
@@ -17,7 +20,11 @@ export default function ReviewRevisions() {
   const queryClient = useQueryClient();
   const { user, isEditor, loading } = useAuth();
   const [revisions, setRevisions] = useState<Revision[]>([]);
+  const { entries } = usePublishedEntries();
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [queueLoading, setQueueLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     document.title = "בדיקת עריכות — מיכלכלה";
@@ -29,14 +36,19 @@ export default function ReviewRevisions() {
   }, [isEditor]);
 
   async function load() {
+    setQueueLoading(true);
+    setLoadError(false);
     const { data, error } = await supabase
       .from("entry_revisions")
       .select("*")
       .eq("status", "pending")
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: true }).limit(100);
+
+    setQueueLoading(false);
 
     if (error) {
       toast.error("לא ניתן לטעון את העריכות הממתינות");
+      setLoadError(true);
       return;
     }
     setRevisions(data ?? []);
@@ -45,22 +57,23 @@ export default function ReviewRevisions() {
   async function review(revision: Revision, status: "approved" | "rejected") {
     if (!user) return;
     setBusy(revision.id);
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("entry_revisions")
       .update({
         status,
         reviewer_id: user.id,
         reviewed_at: new Date().toISOString(),
+        reviewer_notes: notes[revision.id]?.trim() || null,
       })
-      .eq("id", revision.id);
+      .eq("id", revision.id).eq("status", "pending").select("id");
 
     if (!error && status === "approved") {
       await queryClient.invalidateQueries({ queryKey: ["approved-entry-revisions"] });
     }
 
     setBusy(null);
-    if (error) {
-      toast.error("שמירת ההחלטה נכשלה");
+    if (error || !updated?.length) {
+      toast.error(error ? "שמירת ההחלטה נכשלה" : "הגרסה כבר נבדקה או שאין הרשאה לעדכן אותה");
       return;
     }
 
@@ -85,7 +98,7 @@ export default function ReviewRevisions() {
           </div>
         </header>
 
-        {revisions.length === 0 ? (
+        {queueLoading ? <p role="status">טוען תור עריכות…</p> : loadError ? <div><p>לא ניתן לטעון את תור העריכות.</p><Button onClick={() => void load()} variant="outline">ניסיון נוסף</Button></div> : revisions.length === 0 ? (
           <div className="rounded-xl border border-border bg-card py-16 text-center text-muted-foreground">
             אין עריכות שממתינות לבדיקה.
           </div>
@@ -114,17 +127,28 @@ export default function ReviewRevisions() {
                   {revision.content}
                 </div>
 
+                <details className="rounded-md border border-border mb-4 p-3">
+                  <summary className="font-semibold text-primary cursor-pointer">השוואה לערך שפורסם</summary>
+                  <div className="mt-3 text-sm whitespace-pre-wrap max-h-96 overflow-auto" dir="rtl">
+                    {revisionDiff(entries.find(entry => entry.slug === revision.entry_slug)?.fullDescription ?? '', revision.content).map((line, index) => <div key={index} className={line.type === 'added' ? 'bg-emerald-50 text-emerald-950' : line.type === 'removed' ? 'bg-rose-50 text-rose-950 line-through' : ''}>
+                      <span className="inline-block w-5" aria-label={line.type === 'added' ? 'נוסף' : line.type === 'removed' ? 'הוסר' : ''}>{line.type === 'added' ? '+' : line.type === 'removed' ? '−' : ' '}</span>{line.text || ' '}
+                    </div>)}
+                  </div>
+                </details>
+                <label className="block text-sm mb-4">הערה לכותב (לא חובה)
+                  <Textarea className="mt-2" maxLength={2000} value={notes[revision.id] ?? ''} onChange={event => setNotes(current => ({ ...current, [revision.id]: event.target.value }))} placeholder="מה כדאי לשפר או מה נבדק?" />
+                </label>
                 <div className="flex justify-end gap-2">
                   <Button
                     variant="outline"
                     onClick={() => review(revision, "rejected")}
-                    disabled={busy === revision.id}
+                    disabled={busy !== null}
                   >
                     <XCircle className="h-4 w-4" /> דחייה
                   </Button>
                   <Button
                     onClick={() => review(revision, "approved")}
-                    disabled={busy === revision.id}
+                    disabled={busy !== null}
                   >
                     <CheckCircle2 className="h-4 w-4" /> אישור ופרסום
                   </Button>

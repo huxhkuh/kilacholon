@@ -1,0 +1,16 @@
+.article-content { font-size: inherit; line-height: 1.95; overflow-wrap: anywhere; }
+.article-content p { max-width: 76ch; }
+.article-content h2 { line-height: 1.4; }
+.encyclopedia-article :target { scroll-margin-top: 7rem; }
+@media print {
+  header:has(nav), footer, .article-tools, .encyclopedia-article > nav, .encyclopedia-article aside,
+  .encyclopedia-article button, [role='status'], .encyclopedia-article details { display: none !important; }
+  .encyclopedia-article { width: 100%; max-width: none; padding: 0; }
+  .encyclopedia-article > .grid { display: block; }
+  .encyclopedia-article section { break-inside: avoid; }
+  .encyclopedia-article p { orphans: 3; widows: 3; }
+  body { background: white !important; color: black; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

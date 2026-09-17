@@ -1,31 +1,20 @@
+import { useMemo } from "react";
 import Layout from "@/components/Layout";
 import CategoryCard from "@/components/CategoryCard";
-import { categories, getEntriesByCategory } from "@/data/content";
+import { categories } from "@/data/content";
 import { usePublishedEntries } from "@/hooks/usePublishedEntries";
 
 export default function Categories() {
   const { entries } = usePublishedEntries();
+  const counts = useMemo(() => {
+    const result = new Map<string, number>();
+    entries.forEach(entry => result.set(entry.category, (result.get(entry.category) ?? 0) + 1));
+    return result;
+  }, [entries]);
   return (
-    <Layout>
-      <div className="container py-12 md:py-16">
-        <div className="max-w-2xl mb-12">
-          <span className="gold-divider mb-4" />
-          <h1 className="heading-display text-3xl md:text-5xl text-primary mb-3">כל הקטגוריות</h1>
-          <p className="text-muted-foreground text-lg leading-relaxed">
-            דפדפו בכל תחומי הידע באתר. כל קטגוריה מכילה ערכים מסודרים בעברית פשוטה ומדויקת.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {categories.map(cat => (
-            <CategoryCard
-              key={cat.slug}
-              category={cat}
-              count={getEntriesByCategory(cat.slug, entries).length}
-            />
-          ))}
-        </div>
-      </div>
-    </Layout>
+    <Layout><div className="container page-space">
+      <div className="page-heading"><h1>כלכלה, מכל הכיוונים.</h1><p>מהמושגים הראשונים ועד הרעיונות הגדולים. בחרו תחום והתחילו לחקור.</p></div>
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{categories.map(category => <CategoryCard key={category.slug} category={category} count={counts.get(category.slug) ?? 0} />)}</div>
+    </div></Layout>
   );
 }

@@ -24,40 +24,26 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { categories, getEntry } from "@/data/content";
 import { cn } from "@/lib/utils";
+import { readDraft, writeDraft, removeDraft, type EditDraft } from "@/lib/edit-drafts";
 
 type Mode = "edit" | "preview";
 
-type LocalDraft = {
-  title: string;
-  category: string;
-  summary: string;
-  content: string;
-  tagsRaw: string;
-  changeSummary: string;
-  isStub: boolean;
-};
-
-const LOCAL_DRAFT_KEY = "kilacholon:new-entry-draft";
-
-function readLocalDraft(): LocalDraft | null {
-  try {
-    const stored = window.localStorage.getItem(LOCAL_DRAFT_KEY);
-    return stored ? JSON.parse(stored) as LocalDraft : null;
-  } catch {
-    return null;
-  }
+export default function EditEntry() {
+  const { slug = '' } = useParams();
+  return <Editor key={slug} />;
 }
 
-export default function EditEntry() {
+function Editor() {
   const { slug = "" } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, loading: authLoading } = useAuth();
-  const { entries: publishedEntries } = usePublishedEntries();
+  const { entries: publishedEntries, isLoading: catalogLoading, isCommunityLoading, catalogError, communityError } = usePublishedEntries();
 
   const existing = getEntry(slug, publishedEntries);
-  const isNew = !existing;
-  const localDraft = useMemo(() => (isNew ? readLocalDraft() : null), [isNew]);
+  const isNew = !slug;
+  const localDraft = useMemo(() => readDraft(slug), [slug]);
+  const authPath = `/auth?returnTo=${encodeURIComponent(slug ? `/edit/${slug}` : "/edit")}`;
   const guestDraftMode = isNew && !user && searchParams.get("draft") === "1";
 
   const [title, setTitle] = useState(existing?.title ?? localDraft?.title ?? "");
@@ -76,12 +62,14 @@ export default function EditEntry() {
   const [creatingStub, setCreatingStub] = useState(false);
 
   // ---------- Stub expansion workflow ----------
-  const [stubRevisionId, setStubRevisionId] = useState<string | null>(null);
   const [isStubEntry, setIsStubEntry] = useState(false);
-  const [expandMode, setExpandMode] = useState(false);
-  const [defField, setDefField] = useState("");
-  const [explField, setExplField] = useState("");
-  const [exField, setExField] = useState("");
+  const [expandMode, setExpandMode] = useState(localDraft?.expandMode ?? false);
+  const [defField, setDefField] = useState(localDraft?.defField ?? "");
+  const [explField, setExplField] = useState(localDraft?.explField ?? "");
+  const [exField, setExField] = useState(localDraft?.exField ?? "");
+  const [draftState, setDraftState] = useState<"saved" | "error" | null>(null);
+  const [editorInitialized, setEditorInitialized] = useState(isNew);
+  const submitted = useRef(false);
   const initializedSlug = useRef<string | null>(null);
 
   // Minimum chars for each required expansion field
@@ -99,54 +87,43 @@ export default function EditEntry() {
   const explTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
-    if (!existing || initializedSlug.current === existing.slug) return;
+    if (catalogLoading || isCommunityLoading || !existing || initializedSlug.current === existing.slug) return;
     initializedSlug.current = existing.slug;
-    setTitle(existing.title);
-    setCategory(existing.category);
-    setSummary(existing.shortDescription);
-    setContent(existing.fullDescription);
-    setTagsRaw(existing.tags.join(", "));
-  }, [existing]);
+    setTitle(localDraft?.title ?? existing.title);
+    setCategory(localDraft?.category ?? existing.category);
+    setSummary(localDraft?.summary ?? existing.shortDescription);
+    setContent(localDraft?.content ?? existing.fullDescription);
+    setTagsRaw(localDraft?.tagsRaw ?? existing.tags.join(", "));
+    const stub = existing.contentStatus === 'stub' || existing.tags.includes('קצרמר');
+    setIsStubEntry(stub);
+    if (!localDraft) setExpandMode(stub);
+    setEditorInitialized(true);
+  }, [catalogLoading, isCommunityLoading, existing, localDraft]);
 
   useEffect(() => {
     document.title = isNew ? `ערך חדש — מיכלכלה` : `עריכה: ${existing?.title} — מיכלכלה`;
   }, [isNew, existing]);
 
   useEffect(() => {
-    if (!authLoading && !user && !guestDraftMode) navigate("/auth?draft=1");
-  }, [authLoading, user, guestDraftMode, navigate]);
+    if (!authLoading && !user && !guestDraftMode) navigate(authPath);
+  }, [authLoading, user, guestDraftMode, navigate, authPath]);
 
-  // Detect if the entry being edited is a stub (קצרמר) — fetch latest revision
+  const currentDraft = useMemo<EditDraft>(() => ({ title, category, summary, content, tagsRaw, changeSummary, isStub, defField, explField, exField, expandMode }), [title, category, summary, content, tagsRaw, changeSummary, isStub, defField, explField, exField, expandMode]);
   useEffect(() => {
-    if (isNew || !slug) return;
-    const staticLooksLikeStub = existing
-      ? existing.tags.includes("קצרמר") || /קצרמר/.test(existing.shortDescription) || /קצרמר/.test(existing.fullDescription)
-      : false;
-    if (staticLooksLikeStub) {
-      setIsStubEntry(true);
-      setExpandMode(true);
-    }
-
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase
-        .from("entry_revisions")
-        .select("id, title, category, summary, content, tags")
-        .eq("entry_slug", slug)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (cancelled || !data) return;
-      const tags = (data.tags as string[] | null) ?? [];
-      const looksLikeStub = tags.includes("קצרמר") || /קצרמר/.test(data.summary || "") || /קצרמר/.test(data.content || "");
-      if (looksLikeStub) {
-        setIsStubEntry(true);
-        setStubRevisionId(data.id);
-        setExpandMode(true);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [existing, isNew, slug]);
+    if (catalogLoading || isCommunityLoading || !editorInitialized || (!isNew && !existing) || submitted.current) return;
+    // Cleanup also saves synchronously before a link navigates to sign-in.
+    const persist = () => {
+      if (submitted.current) return;
+      const ok = writeDraft(slug, currentDraft);
+      setDraftState(ok ? 'saved' : 'error');
+    };
+    const timer = window.setTimeout(persist, 600);
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (!writeDraft(slug, currentDraft)) { event.preventDefault(); event.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => { window.clearTimeout(timer); window.removeEventListener('beforeunload', beforeUnload); persist(); };
+  }, [currentDraft, slug, catalogLoading, isCommunityLoading, editorInitialized, isNew, existing]);
 
   // ---------- Editor toolbar helpers ----------
   function wrapSelection(before: string, after = before) {
@@ -219,7 +196,7 @@ export default function EditEntry() {
 
   // Create a new stub entry on the fly and return its slug
   async function createStubInline(rawTitle: string): Promise<{ slug: string; title: string } | null> {
-    if (!user) { navigate("/auth"); return null; }
+    if (!user) { navigate(authPath); return null; }
     const t = rawTitle.trim();
     if (!t) return null;
     const newSlug = slugify(t);
@@ -251,9 +228,15 @@ export default function EditEntry() {
 
   // ---------- Submit ----------
   async function handleSubmit() {
+    if (!user && guestDraftMode) {
+      const saved = writeDraft(slug, currentDraft);
+      if (saved) toast.success("הטיוטה נשמרה במכשיר הזה. התחברו כשתרצו לשלוח אותה לבדיקה.");
+      else toast.error("הדפדפן חסם שמירה מקומית. העתיקו את הטקסט לפני סגירת העמוד.");
+      return;
+    }
     // Stub expansion submission
     if (expandMode) {
-      if (!user) { navigate("/auth?draft=1"); return; }
+      if (!user) { navigate(authPath); return; }
       if (!defOk || !explOk || !exOk) {
         toast.error("נא למלא את שלושת השדות (הגדרה, הסבר, דוגמה) באורך המינימלי");
         return;
@@ -283,6 +266,8 @@ export default function EditEntry() {
       });
       setSubmitting(false);
       if (error) { toast.error("שגיאה בשליחה: " + error.message); return; }
+      submitted.current = true;
+      removeDraft(slug);
       toast.success("ההרחבה נשלחה לבדיקת עורך. תודה על תרומתך!");
       navigate(`/entry/${slugForSave}`);
       return;
@@ -308,6 +293,11 @@ export default function EditEntry() {
       ? title.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\u0590-\u05FF-]/g, "")
       : slug;
 
+    if (isNew && (!slugForSave || publishedEntries.some(entry => entry.slug === slugForSave || entry.title.trim() === title.trim()))) {
+      toast.error('ערך בשם הזה כבר קיים, או שהכותרת אינה תקינה. חפשו אותו במילון לפני יצירת ערך חדש.');
+      return;
+    }
+
     const stubSummary = "ערך זה הוא קצרמר. אתם מוזמנים להרחיב אותו.";
     const stubContent = `## ${title.trim()}\n\nזהו ערך ריק (קצרמר) שעדיין לא נכתב.\n\nאתם מוזמנים [לערוך](/edit/${slugForSave}) ולהוסיף תוכן: הגדרה, הסבר, דוגמאות וקישורים פנימיים בעזרת התחביר \`[[slug]]\`.`;
     const effectiveTags = isStub
@@ -315,16 +305,9 @@ export default function EditEntry() {
       : tagsRaw.split(",").map(t => t.trim()).filter(Boolean);
 
     if (!user) {
-      window.localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify({
-        title,
-        category,
-        summary,
-        content,
-        tagsRaw,
-        changeSummary,
-        isStub,
-      } satisfies LocalDraft));
-      toast.success("הטיוטה נשמרה במכשיר הזה. התחברו כשתרצו לשלוח אותה לבדיקה.");
+      const saved = writeDraft(slug, currentDraft);
+      if (saved) toast.success("הטיוטה נשמרה במכשיר הזה. התחברו כשתרצו לשלוח אותה לבדיקה.");
+      else toast.error("הדפדפן חסם שמירה מקומית. העתיקו את הטקסט לפני סגירת העמוד.");
       return;
     }
 
@@ -343,18 +326,22 @@ export default function EditEntry() {
     setSubmitting(false);
 
     if (error) { toast.error("שגיאה בשליחה: " + error.message); return; }
-    if (isNew) window.localStorage.removeItem(LOCAL_DRAFT_KEY);
+    submitted.current = true;
+    removeDraft(slug);
     toast.success("ההגשה נשלחה לבדיקת עורך. תודה על תרומתך!");
     navigate(isNew ? "/" : `/entry/${slug}`);
   }
 
   const linkableEntries = useMemo(() => publishedEntries, [publishedEntries]);
 
-  if (authLoading) return <Layout><div className="container py-24 text-center text-muted-foreground">טוען…</div></Layout>;
+  if (authLoading || catalogLoading || isCommunityLoading || (!isNew && existing && !editorInitialized)) return <Layout><div className="container py-24 text-center text-muted-foreground">טוען…</div></Layout>;
+
+  if (catalogError || (!isNew && !existing)) return <Layout><div className="container py-16"><h1>הערך אינו זמין לעריכה</h1><p>נסו לטעון שוב את העמוד, או חזרו למילון.</p><Button asChild><Link to="/dictionary">למילון</Link></Button></div></Layout>;
 
   return (
     <Layout>
       <div className="container py-8 md:py-10 max-w-5xl">
+        {communityError && <div role="status" className="mb-5 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">לא הצלחנו לטעון את העריכות הקהילתיות. העורך מציג את הטיוטה המקומית, אם נשמרה, או את גרסת הבסיס. אפשר להמשיך לכתוב; לפני השליחה כדאי לוודא שלא פורסמה גרסה חדשה יותר.</div>}
         {/* breadcrumb */}
         <nav className="text-sm text-muted-foreground mb-4 flex items-center gap-1.5 flex-wrap">
           <Link to="/" className="hover:text-primary">ראשי</Link>
@@ -376,7 +363,7 @@ export default function EditEntry() {
                 מצב טיוטה: כתבו ופתחו תצוגה מקדימה בלי חשבון. הטיוטה תישמר כאן, ולשליחה לבדיקה תידרש התחברות.
               </p>
               <Button asChild size="sm" variant="outline">
-                <Link to="/auth?draft=1">התחברות לשליחה</Link>
+                <Link to={authPath}>התחברות לשליחה</Link>
               </Button>
             </div>
           )}
@@ -427,6 +414,8 @@ export default function EditEntry() {
             </div>
           )}
         </header>
+
+        <p role="status" className="mb-4 text-sm text-muted-foreground">{draftState === 'saved' ? 'הטיוטה נשמרה אוטומטית במכשיר הזה.' : draftState === 'error' ? 'השמירה המקומית חסומה. העתיקו את הטקסט לפני יציאה מהעמוד.' : 'הטיוטה תישמר אוטומטית במכשיר הזה.'}</p>
 
         {/* Tabs: Edit / Preview */}
         <div className="border-b border-border flex items-center gap-1 mb-6">
@@ -564,9 +553,9 @@ export default function EditEntry() {
               </div>
 
               {/* Submit */}
-              <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border">
                 <Button asChild variant="ghost"><Link to={`/entry/${slug}`}>ביטול</Link></Button>
-                <div className="flex items-center gap-2">
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                   <Button variant="outline" onClick={() => { setExpandMode(false); }}>
                     מעבר לעריכה חופשית
                   </Button>
@@ -793,9 +782,9 @@ export default function EditEntry() {
               </div>
 
               {/* Submit */}
-              <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border">
                 <Button asChild variant="ghost"><Link to={isNew ? "/" : `/entry/${slug}`}>ביטול</Link></Button>
-                <div className="flex items-center gap-2">
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                   <Button variant="outline" onClick={() => setMode("preview")} disabled={isStub}>
                     <Eye className="h-4 w-4" /> תצוגה מקדימה
                   </Button>

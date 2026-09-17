@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import { readList, writeList } from '@/lib/localLists';
 
 const STORAGE_KEY = "mikhlala:read-entries";
 const CHANGE_EVENT = "mikhlala:read-entries-change";
 
 function readStoredSlugs() {
-  try {
-    const value = window.localStorage.getItem(STORAGE_KEY);
-    const parsed = value ? JSON.parse(value) : [];
-    return new Set<string>(Array.isArray(parsed) ? parsed.filter(item => typeof item === "string") : []);
-  } catch {
-    return new Set<string>();
-  }
+  return new Set(readList(STORAGE_KEY));
 }
 
 export function useReadEntries() {
@@ -30,7 +25,7 @@ export function useReadEntries() {
     const next = readStoredSlugs();
     if (next.has(slug)) return;
     next.add(slug);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(next)));
+    writeList(STORAGE_KEY, Array.from(next));
     window.dispatchEvent(new Event(CHANGE_EVENT));
   }, []);
 

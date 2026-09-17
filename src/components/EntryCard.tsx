@@ -1,47 +1,39 @@
 import { Link } from "react-router-dom";
-import { Calendar, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Bookmark, BookmarkCheck, CheckCircle2 } from "lucide-react";
 import type { Entry } from "@/data/content";
 import { getCategory } from "@/data/content";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useReadEntries } from "@/hooks/useReadEntries";
+import { useSavedEntries } from "@/hooks/useSavedEntries";
+import { isStubEntry, readingMinutes } from "@/lib/entry-search";
+import { cn } from "@/lib/utils";
 
 export default function EntryCard({ entry, compact = false }: { entry: Entry; compact?: boolean }) {
   const category = getCategory(entry.category);
   const { isRead } = useReadEntries();
-  const hasRead = isRead(entry.slug);
-
+  const { isSaved, toggleSaved } = useSavedEntries();
+  const saved = isSaved(entry.slug);
   return (
-    <Link
-      to={`/entry/${entry.slug}`}
-      className="group block rounded-xl border border-border/70 bg-card p-5 shadow-card hover:shadow-elegant hover:border-gold/40 transition-all duration-300"
-    >
-      <div className="flex items-center gap-2 mb-2">
-        {category && (
-          <Badge variant="secondary" className="bg-accent/70 text-accent-foreground text-[11px] font-normal hover:bg-accent">
-            {category.name}
-          </Badge>
-        )}
-        <span className="text-[11px] text-muted-foreground">{entry.level}</span>
-        {hasRead && (
-          <span className="mr-auto inline-flex items-center gap-1 text-[11px] text-emerald-700">
-            <CheckCircle2 className="h-3.5 w-3.5" /> נקרא
-          </span>
-        )}
+    <article className={cn("entry-card", compact && "entry-card-compact")}>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="text-sm font-medium text-gold-deep">{category?.name ?? "כלכלה"}</span>
+        <div className="flex items-center gap-1">
+          {isStubEntry(entry) && <Badge variant="secondary">קצרמר</Badge>}
+          <Button size="icon" variant="ghost" aria-label={`${saved ? "הסרת" : "שמירת"} ${entry.title} ${saved ? "מהרשימה" : "לקריאה"}`} aria-pressed={saved} onClick={() => toggleSaved(entry.slug)}>
+            {saved ? <BookmarkCheck /> : <Bookmark />}
+          </Button>
+        </div>
       </div>
-      <h3 className="font-display font-semibold text-lg text-foreground mb-2 group-hover:text-primary transition-colors leading-tight">
-        {entry.title}
-      </h3>
-      {!compact && (
-        <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3 mb-3">
-          {entry.shortDescription}
-        </p>
-      )}
-      <div className="flex items-center gap-4 text-xs text-muted-foreground/80 pt-2 border-t border-border/50">
-        <span className="flex items-center gap-1">
-          <Calendar className="h-3.5 w-3.5" />
-          עודכן {new Date(entry.updatedAt).toLocaleDateString('he-IL')}
-        </span>
-      </div>
-    </Link>
+      <Link to={`/entry/${entry.slug}`} className="entry-card-link group flex flex-1 flex-col">
+        <h3 className="font-display text-2xl font-bold leading-tight group-hover:text-primary transition-colors mb-3">{entry.title}</h3>
+        {!compact && <p className="text-muted-foreground leading-relaxed line-clamp-3 mb-5">{entry.shortDescription}</p>}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-auto pt-3 text-xs text-muted-foreground">
+          <span>{readingMinutes(entry)} דקות קריאה</span><span>·</span><span>{entry.level}</span>
+          {isRead(entry.slug) && <span className="inline-flex items-center gap-1"><CheckCircle2 className="size-3.5" /> נקרא</span>}
+          <ArrowLeft className="size-4 mr-auto text-primary transition-transform group-hover:-translate-x-1" aria-hidden="true" />
+        </div>
+      </Link>
+    </article>
   );
 }

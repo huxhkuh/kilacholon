@@ -1,5 +1,5 @@
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { Calendar, ArrowRight, CheckCircle2, XCircle, Lightbulb, BookOpen, MessageCircle, FileText, History, Pencil } from "lucide-react";
+import { Calendar, ArrowRight, CheckCircle2, XCircle, Lightbulb, BookOpen, MessageCircle, FileText, History, Pencil, Bookmark, BookmarkCheck, Printer, Share2, Clock } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Layout from "@/components/Layout";
 import EntryCard from "@/components/EntryCard";
@@ -11,39 +11,45 @@ import { getEntry, getCategory } from "@/data/content";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { useEffect } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useEffect, useState } from "react";
+import { useSavedEntries } from "@/hooks/useSavedEntries";
+import { appUrl, isSafeExternalUrl } from "@/lib/urls";
+import { toast } from "sonner";
+import "@/article.css";
 import { usePublishedEntries } from "@/hooks/usePublishedEntries";
 import { cn } from "@/lib/utils";
 import { useReadEntries } from "@/hooks/useReadEntries";
+import { readingMinutes } from '@/lib/entry-search';
 
 type Tab = "article" | "talk" | "history";
 
 export default function EntryPage() {
   const { slug = "" } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { entries, isLoading } = usePublishedEntries();
   const { markRead } = useReadEntries();
+  const { isSaved, toggleSaved } = useSavedEntries();
+  const [fontSize, setFontSize] = useState(18);
   const entry = getEntry(slug, entries);
   const category = entry ? getCategory(entry.category) : undefined;
   const related = entry ? entry.related.map(s => entries.find(e => e.slug === s)).filter(Boolean) : [];
 
   const params = new URLSearchParams(window.location.search);
-  const tab = (params.get("tab") as Tab) || "article";
+  const requestedTab = params.get("tab");
+  const tab: Tab = requestedTab === "talk" || requestedTab === "history" ? requestedTab : "article";
 
   useEffect(() => {
     if (!entry) return;
 
     const description = entry.shortDescription.slice(0, 155);
-    const canonical = new URL(`/entry/${entry.slug}`, window.location.origin).href;
+    const canonical = appUrl(`/entry/${entry.slug}`);
     document.title = `${entry.title} — מיכלכלה`;
     document.querySelector('meta[name="description"]')?.setAttribute("content", description);
     document.querySelector('meta[property="og:title"]')?.setAttribute("content", document.title);
     document.querySelector('meta[property="og:description"]')?.setAttribute("content", description);
     document.querySelector('link[rel="canonical"]')?.setAttribute("href", canonical);
-    markRead(entry.slug);
-  }, [entry, markRead]);
+    if (tab === "article") markRead(entry.slug);
+  }, [entry, markRead, tab]);
 
   if (!entry && isLoading) {
     return <Layout><div className="container py-24 text-center text-muted-foreground">טוען ערך...</div></Layout>;
@@ -65,8 +71,9 @@ export default function EntryPage() {
     { id: "full", label: "הסבר מלא" },
     ...(entry.whyImportant ? [{ id: "why", label: "למה זה חשוב?" }] : []),
     ...(entry.example ? [{ id: "example", label: "דוגמה" }] : []),
-    ...(entry.pros.length || entry.cons.length ? [{ id: "pros-cons", label: "יתרונות וחסרונות" }] : []),
+    ...(entry.pros.length || entry.cons.length ? [{ id: "pros-cons", label: "שימושים ומגבלות" }] : []),
     ...(entry.faq.length ? [{ id: "faq", label: "שאלות נפוצות" }] : []),
+    ...(entry.sources?.length ? [{ id: "sources", label: "מקורות והרחבה" }] : []),
     ...(related.length ? [{ id: "related", label: "ערכים קשורים" }] : []),
   ];
 
@@ -82,13 +89,12 @@ export default function EntryPage() {
   }
 
   function handleEdit() {
-    if (!user) navigate("/auth");
-    else navigate(`/edit/${slug}`);
+    navigate(`/edit/${slug}`);
   }
 
   return (
     <Layout>
-      <article className="container py-8 md:py-10">
+      <article className="container py-8 md:py-10 encyclopedia-article">
         {/* breadcrumb */}
         <nav className="text-sm text-muted-foreground mb-4 flex items-center gap-1.5 flex-wrap">
           <Link to="/" className="hover:text-primary">ראשי</Link>
@@ -107,6 +113,7 @@ export default function EntryPage() {
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
+                aria-pressed={tab === t.id}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
                   tab === t.id
@@ -135,43 +142,53 @@ export default function EntryPage() {
                         <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/15">{category.name}</Badge>
                       </Link>
                     )}
-                    <Badge variant="outline" className="border-gold/40 text-gold-deep bg-gold/5">{entry.level}</Badge>
+                    {category?.name !== entry.level && <Badge variant="outline" className="border-gold/40 text-gold-deep bg-gold/5">{entry.level}</Badge>}
                   </div>
                   <h1 className="heading-display text-3xl sm:text-4xl md:text-5xl text-primary leading-tight mb-3 text-balance">{entry.title}</h1>
                   <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><Clock className="h-4 w-4" />{readingMinutes(entry)} דקות קריאה</span>
                     <span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" />עודכן ב-{new Date(entry.updatedAt).toLocaleDateString("he-IL")}</span>
                   </div>
                 </header>
 
-                <div className="mb-7 rounded-xl border border-border bg-accent/25 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <p className="text-sm text-foreground/85 leading-relaxed m-0">
-                    זהו ערך באנציקלופדיה שיתופית. מצאתם ניסוח חסר, מקור מועיל או קישור לערך אחר?
-                  </p>
-                  <Button size="sm" variant="outline" onClick={handleEdit} className="shrink-0">
-                    <Pencil className="h-3.5 w-3.5" /> שפרו את הערך
+                <div className="article-tools flex flex-wrap items-center gap-2 mb-6" aria-label="כלי קריאה">
+                  <Button variant="outline" size="sm" onClick={() => toggleSaved(entry.slug)} aria-pressed={isSaved(entry.slug)}>
+                    {isSaved(entry.slug) ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}{isSaved(entry.slug) ? 'נשמר לקריאה' : 'שמירה לקריאה'}
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="h-4 w-4" />הדפסה</Button>
+                  <Button variant="outline" size="sm" onClick={async () => {
+                    try { await navigator.clipboard.writeText(appUrl(`/entry/${entry.slug}`)); toast.success('הקישור הועתק'); }
+                    catch { toast.error('לא ניתן להעתיק אוטומטית. אפשר להעתיק את כתובת העמוד.'); }
+                  }}><Share2 className="h-4 w-4" />העתקת קישור</Button>
+                  <div className="flex items-center gap-2 border border-border rounded-md px-2 h-9">
+                    <button aria-label="הקטנת טקסט" disabled={fontSize <= 16} onClick={() => setFontSize(size => Math.max(16, size - 1))} className="px-2 disabled:opacity-30">א−</button>
+                    <span className="text-xs text-muted-foreground">גודל טקסט</span>
+                    <button aria-label="הגדלת טקסט" disabled={fontSize >= 24} onClick={() => setFontSize(size => Math.min(24, size + 1))} className="px-2 disabled:opacity-30">א+</button>
+                  </div>
                 </div>
+                {entry.tags.includes('קצרמר') && <div className="mb-6 border-r-4 border-gold bg-secondary p-4"><strong>ערך בתחילת הדרך.</strong> יש כאן נקודת פתיחה ללימוד ולכתיבה; הערך עדיין דורש הרחבה ומקורות נוספים.</div>}
+                <details className="lg:hidden mb-6 rounded-md border border-border p-4"><summary className="font-semibold cursor-pointer">תוכן הערך</summary><ul className="pt-3 space-y-2">{sections.map(section => <li key={section.id}><a href={`#${section.id}`} className="text-primary underline underline-offset-4">{section.label}</a></li>)}</ul></details>
 
                 {/* תקציר */}
                 <section id="summary" className="mb-8 scroll-mt-20">
                   <div className="rounded-xl bg-secondary/60 border-r-4 border-gold p-5 md:p-6">
-                    <p className="text-base md:text-lg leading-[1.85] text-foreground/90 m-0">{entry.shortDescription}</p>
+                    <p style={{ fontSize }} className="text-base md:text-lg leading-[1.85] text-foreground/90 m-0">{entry.shortDescription}</p>
                   </div>
                 </section>
 
                 {/* הסבר מלא */}
-                <section id="full" className="mb-8 scroll-mt-20">
+                <section id="full" className="mb-8 scroll-mt-20" style={{ fontSize }}>
                   <h2 className="heading-display text-2xl md:text-3xl text-primary mb-3 pb-1.5 border-b border-border flex items-center gap-2">
                     <BookOpen className="h-5 w-5 text-gold" /> הסבר מלא
                   </h2>
-                  <WikiText text={entry.fullDescription} knownEntries={entries} className="text-foreground/90 leading-[1.95] text-[17px]" />
+                  <WikiText text={entry.fullDescription} knownEntries={entries} className="article-content text-foreground/90" />
                 </section>
 
                 {/* למה חשוב */}
                 {entry.whyImportant && <section id="why" className="mb-8 scroll-mt-20">
                   <h2 className="heading-display text-2xl md:text-3xl text-primary mb-3 pb-1.5 border-b border-border">למה זה חשוב?</h2>
                   <div className="rounded-xl bg-gradient-to-l from-accent/60 to-secondary/40 p-6 border border-gold/20">
-                    <p className="text-base md:text-lg leading-[1.85] text-foreground/90 m-0">{entry.whyImportant}</p>
+                    <p style={{ fontSize }} className="text-base md:text-lg leading-[1.85] text-foreground/90 m-0">{entry.whyImportant}</p>
                   </div>
                 </section>}
 
@@ -181,24 +198,24 @@ export default function EntryPage() {
                     <Lightbulb className="h-5 w-5 text-gold" /> דוגמה פשוטה
                   </h2>
                   <div className="rounded-xl bg-card border border-border p-6 shadow-card">
-                    <p className="text-base leading-[1.85] text-foreground/90 m-0">{entry.example}</p>
+                    <p style={{ fontSize }} className="text-base leading-[1.85] text-foreground/90 m-0">{entry.example}</p>
                   </div>
                 </section>}
 
-                {/* יתרונות וחסרונות */}
+                {/* שימושים ומגבלות */}
                 {(entry.pros.length > 0 || entry.cons.length > 0) && <section id="pros-cons" className="mb-8 scroll-mt-20">
-                  <h2 className="heading-display text-2xl md:text-3xl text-primary mb-3 pb-1.5 border-b border-border">יתרונות וחסרונות</h2>
+                  <h2 className="heading-display text-2xl md:text-3xl text-primary mb-3 pb-1.5 border-b border-border">שימושים ומגבלות</h2>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/40 p-5">
-                      <h3 className="font-display font-semibold text-emerald-900 mb-3 flex items-center gap-2"><CheckCircle2 className="h-5 w-5" /> יתרונות</h3>
+                      <h3 className="font-display font-semibold text-emerald-900 mb-3 flex items-center gap-2"><CheckCircle2 className="h-5 w-5" /> מה אפשר ללמוד</h3>
                       <ul className="space-y-2">
-                        {entry.pros.map((p, i) => (<li key={i} className="flex gap-2 text-sm leading-relaxed text-emerald-950/85"><span className="text-emerald-700 mt-1">•</span>{p}</li>))}
+                        {entry.pros.map((p, i) => (<li key={i} style={{ fontSize }} className="flex gap-2 text-sm leading-relaxed text-emerald-950/85"><span className="text-emerald-700 mt-1">•</span>{p}</li>))}
                       </ul>
                     </div>
                     <div className="rounded-xl border border-rose-200/60 bg-rose-50/40 p-5">
-                      <h3 className="font-display font-semibold text-rose-900 mb-3 flex items-center gap-2"><XCircle className="h-5 w-5" /> חסרונות</h3>
+                      <h3 className="font-display font-semibold text-rose-900 mb-3 flex items-center gap-2"><XCircle className="h-5 w-5" /> מגבלות וטעויות נפוצות</h3>
                       <ul className="space-y-2">
-                        {entry.cons.map((c, i) => (<li key={i} className="flex gap-2 text-sm leading-relaxed text-rose-950/85"><span className="text-rose-700 mt-1">•</span>{c}</li>))}
+                        {entry.cons.map((c, i) => (<li key={i} style={{ fontSize }} className="flex gap-2 text-sm leading-relaxed text-rose-950/85"><span className="text-rose-700 mt-1">•</span>{c}</li>))}
                       </ul>
                     </div>
                   </div>
@@ -210,11 +227,19 @@ export default function EntryPage() {
                   <Accordion type="single" collapsible className="rounded-xl border border-border bg-card overflow-hidden">
                     {entry.faq.map((f, i) => (
                       <AccordionItem key={i} value={`q-${i}`} className="border-b border-border last:border-0 px-5">
-                        <AccordionTrigger className="text-right hover:no-underline font-medium text-foreground py-4">{f.q}</AccordionTrigger>
-                        <AccordionContent className="text-muted-foreground leading-relaxed">{f.a}</AccordionContent>
+                        <AccordionTrigger style={{ fontSize }} className="text-right hover:no-underline font-medium text-foreground py-4">{f.q}</AccordionTrigger>
+                        <AccordionContent style={{ fontSize }} className="text-muted-foreground leading-relaxed">{f.a}</AccordionContent>
                       </AccordionItem>
                     ))}
                   </Accordion>
+                </section>}
+
+                {!!entry.sources?.length && <section id="sources" className="mb-8 scroll-mt-24">
+                  <h2 className="heading-display text-2xl text-primary mb-4">מקורות והרחבה</h2>
+                  <ul className="space-y-3">{entry.sources.filter(source => isSafeExternalUrl(source.url)).map(source => <li key={source.url}>
+                    <a href={source.url} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-4 break-words">{source.title}</a>
+                  </li>)}</ul>
+                  <p className="mt-4 text-sm text-muted-foreground">הדוגמאות המספריות נועדו להמחשה, אלא אם צוין אחרת. התנאים בפועל תלויים במוצר, במדינה ובמועד הבדיקה.</p>
                 </section>}
 
                 {related.length > 0 && (
@@ -249,7 +274,7 @@ export default function EntryPage() {
             )}
           </div>
 
-          {/* Sidebar: infobox + TOC + ad */}
+          {/* Article details and table of contents */}
           <aside className="space-y-5">
             <Infobox entry={entry} category={category} />
             {tab === "article" && (

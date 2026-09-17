@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -21,35 +21,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
 
   useEffect(() => {
-    // 1. set up listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
+    let active = true;
+    let receivedAuthEvent = false;
+    async function applySession(sess: Session | null) {
+      const request = ++requestId.current;
       setSession(sess);
       setUser(sess?.user ?? null);
-      if (sess?.user) {
-        // defer to avoid deadlock
-        setTimeout(() => fetchRoles(sess.user.id), 0);
-      } else {
-        setRoles([]);
+      setRoles([]);
+      setLoading(true);
+      try {
+        if (sess?.user) {
+          const { data, error } = await supabase.from('user_roles').select('role').eq('user_id', sess.user.id);
+          if (active && request === requestId.current) setRoles(error ? [] : data?.map(r => r.role as Role) ?? []);
+        }
+      } catch {
+        if (active && request === requestId.current) setRoles([]);
+      } finally {
+        if (active && request === requestId.current) setLoading(false);
       }
+    }
+    // 1. set up listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
+      receivedAuthEvent = true;
+      // Supabase callbacks hold an auth lock; fetch roles outside the callback.
+      setTimeout(() => { if (active) void applySession(sess); }, 0);
     });
 
     // 2. then check existing session
     supabase.auth.getSession().then(({ data: { session: sess } }) => {
-      setSession(sess);
-      setUser(sess?.user ?? null);
-      if (sess?.user) fetchRoles(sess.user.id);
-      setLoading(false);
-    });
+      if (active && !receivedAuthEvent) void applySession(sess);
+    }).catch(() => { if (active) setLoading(false); });
 
-    return () => subscription.unsubscribe();
+    return () => { active = false; subscription.unsubscribe(); };
   }, []);
-
-  async function fetchRoles(userId: string) {
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-    setRoles((data?.map(r => r.role as Role)) ?? []);
-  }
 
   const isEditor = roles.includes("editor") || roles.includes("admin");
   const isAdmin = roles.includes("admin");
